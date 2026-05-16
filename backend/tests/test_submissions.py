@@ -1,0 +1,88 @@
+import uuid
+from fastapi.testclient import TestClient
+
+
+BASE = "/api/submissions"
+
+SUBMISSION_BODY = {
+    "member_name": "James OLeary",
+    "provider_name": "Joyful Behavior Therapy",
+    "service_date": "2026-04-28",
+    "amount_billed": 240000,
+    "expected_reimbursement": 180000,
+    "network_treatment": "out_of_network",
+    "submitted_date": "2026-05-01",
+    "submission_method": "portal",
+}
+
+
+def test_create_submission(client: TestClient):
+    resp = client.post(BASE, json=SUBMISSION_BODY)
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["member_name"] == "James OLeary"
+    assert data["flags"] == []
+    assert data["anthem_claim_number"] is None
+
+
+def test_list_submissions(client: TestClient):
+    client.post(BASE, json=SUBMISSION_BODY)
+    client.post(BASE, json={**SUBMISSION_BODY, "member_name": "Nolan OLeary"})
+    resp = client.get(BASE)
+    assert resp.status_code == 200
+    assert len(resp.json()) == 2
+
+
+def test_list_filter_by_member(client: TestClient):
+    client.post(BASE, json=SUBMISSION_BODY)
+    client.post(BASE, json={**SUBMISSION_BODY, "member_name": "Nolan OLeary"})
+    resp = client.get(BASE, params={"member": "Nolan"})
+    assert len(resp.json()) == 1
+    assert resp.json()[0]["member_name"] == "Nolan OLeary"
+
+
+def test_get_submission(client: TestClient):
+    created = client.post(BASE, json=SUBMISSION_BODY).json()
+    resp = client.get(f"{BASE}/{created['id']}")
+    assert resp.status_code == 200
+    assert resp.json()["id"] == created["id"]
+
+
+def test_get_submission_not_found(client: TestClient):
+    resp = client.get(f"{BASE}/{uuid.uuid4()}")
+    assert resp.status_code == 404
+
+
+def test_patch_submission(client: TestClient):
+    created = client.post(BASE, json=SUBMISSION_BODY).json()
+    resp = client.patch(f"{BASE}/{created['id']}", json={"notes": "Updated note"})
+    assert resp.status_code == 200
+    assert resp.json()["notes"] == "Updated note"
+
+
+def test_delete_submission(client: TestClient):
+    created = client.post(BASE, json=SUBMISSION_BODY).json()
+    resp = client.delete(f"{BASE}/{created['id']}")
+    assert resp.status_code == 204
+    assert client.get(f"{BASE}/{created['id']}").status_code == 404
+
+
+def test_upload_and_download_pdf(client: TestClient):
+    created = client.post(BASE, json=SUBMISSION_BODY).json()
+    sub_id = created["id"]
+    pdf_data = b"%PDF-1.4 fake content"
+    resp = client.post(
+        f"{BASE}/{sub_id}/pdf",
+        files={"file": ("bill.pdf", pdf_data, "application/pdf")},
+    )
+    assert resp.status_code == 204
+
+    dl = client.get(f"{BASE}/{sub_id}/pdf")
+    assert dl.status_code == 200
+    assert dl.content == pdf_data
+
+
+def test_download_pdf_not_found(client: TestClient):
+    created = client.post(BASE, json=SUBMISSION_BODY).json()
+    resp = client.get(f"{BASE}/{created['id']}/pdf")
+    assert resp.status_code == 404

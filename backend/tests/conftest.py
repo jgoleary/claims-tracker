@@ -4,6 +4,7 @@ from datetime import date
 from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
 
 from app.models import Base, Submission, AnthemClaim
@@ -13,7 +14,11 @@ from app.storage import LocalFileStorage
 
 @pytest.fixture(scope="function")
 def db():
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     Base.metadata.create_all(engine)
     with Session(engine) as session:
         yield session
