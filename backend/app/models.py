@@ -76,13 +76,14 @@ class Match(Base):
         String, ForeignKey("submissions.id"), primary_key=True
     )
     anthem_claim_number: Mapped[str] = mapped_column(
-        String, ForeignKey("anthem_claims.claim_number"), nullable=False
+        String, ForeignKey("anthem_claims.claim_number"), nullable=False, unique=True
     )
     match_type: Mapped[str] = mapped_column(
         SAEnum("auto", "confirmed", "manual", name="match_type"),
         nullable=False,
     )
-    confirmed_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    matched_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     submission: Mapped["Submission"] = relationship("Submission", back_populates="match")
     anthem_claim: Mapped["AnthemClaim"] = relationship("AnthemClaim", back_populates="match")

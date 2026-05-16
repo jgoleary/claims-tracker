@@ -46,8 +46,7 @@ def get_storage() -> Storage:
     """Return the process-wide storage instance (lazy init)."""
     global _default_storage
     if _default_storage is None:
-        from pathlib import Path as _Path
         _default_storage = LocalFileStorage(
-            _Path(__file__).parent.parent.parent / "data" / "pdfs"
+            Path(__file__).parent.parent.parent / "data" / "pdfs"
         )
     return _default_storage
