@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api'
+import { useYear } from '../context/YearContext'
 
 const NAV = [
   { to: '/', label: 'Dashboard', end: true },
@@ -12,10 +13,15 @@ const NAV = [
   { to: '/settings', label: 'Settings' },
 ]
 
+const currentYear = new Date().getFullYear()
+const YEAR_OPTIONS = Array.from({ length: currentYear - 2023 }, (_, i) => currentYear - i)
+
 export default function Layout() {
+  const { year, setYear } = useYear()
+
   const { data: dash } = useQuery({
-    queryKey: ['dashboard'],
-    queryFn: api.dashboard.get,
+    queryKey: ['dashboard', year],
+    queryFn: () => api.dashboard.get(year),
     refetchInterval: 60_000,
   })
 
@@ -28,6 +34,18 @@ export default function Layout() {
       <aside className="w-52 bg-gray-900 text-gray-100 flex flex-col shrink-0">
         <div className="px-4 py-5 border-b border-gray-700">
           <h1 className="text-sm font-bold tracking-wide uppercase text-gray-300">Claims Tracker</h1>
+          <div className="mt-3 flex items-center gap-2">
+            <label className="text-xs text-gray-500 shrink-0">Plan year</label>
+            <select
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+              className="flex-1 bg-gray-800 border border-gray-600 text-gray-200 text-xs rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              {YEAR_OPTIONS.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
         </div>
         <nav className="flex-1 px-2 py-4 space-y-1">
           {NAV.map(({ to, label, end }) => (

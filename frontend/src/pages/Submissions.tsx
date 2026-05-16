@@ -2,61 +2,94 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
-import type { SubmissionCreate } from '../types'
+import type { SubmissionCreate, SubmissionResponse } from '../types'
 import Modal from '../components/Modal'
 import AlertBadge from '../components/Alert'
 import { formatCents, formatDate } from '../utils'
+import { useYear } from '../context/YearContext'
 
-function AddModal({ onClose }: { onClose: () => void }) {
+function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
+  onClose: () => void
+  initial?: SubmissionResponse
+  memberNames: string[]
+  providerNames: string[]
+}) {
   const qc = useQueryClient()
-  const [form, setForm] = useState<SubmissionCreate>({
-    member_name: '', provider_name: '', service_date: '', amount_billed: 0,
-    expected_reimbursement: 0, network_treatment: 'out_of_network',
-    submitted_date: '', submission_method: 'portal', notes: '',
+  const isEdit = !!initial
+
+  const [form, setForm] = useState({
+    member_name: initial?.member_name ?? '',
+    provider_name: initial?.provider_name ?? '',
+    service_date: initial?.service_date ?? '',
+    amount_billed: initial ? String(initial.amount_billed / 100) : '',
+    expected_reimbursement: initial ? String(initial.expected_reimbursement / 100) : '',
+    network_treatment: (initial?.network_treatment ?? 'out_of_network') as SubmissionCreate['network_treatment'],
+    submitted_date: initial?.submitted_date ?? '',
+    submission_method: (initial?.submission_method ?? 'portal') as SubmissionCreate['submission_method'],
+    notes: initial?.notes ?? '',
   })
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const body = { ...form, amount_billed: Math.round(form.amount_billed * 100), expected_reimbursement: Math.round(form.expected_reimbursement * 100) }
-      const sub = await api.submissions.create(body)
-      if (pdfFile) await api.submissions.uploadPdf(sub.id, pdfFile)
-      return sub
+      const dollars = {
+        amount_billed: Math.round((parseFloat(form.amount_billed) || 0) * 100),
+        expected_reimbursement: Math.round((parseFloat(form.expected_reimbursement) || 0) * 100),
+      }
+      if (isEdit) {
+        return api.submissions.update(initial!.id, { ...form, ...dollars })
+      } else {
+        const body: SubmissionCreate = { ...form, ...dollars }
+        const sub = await api.submissions.create(body)
+        if (pdfFile) await api.submissions.uploadPdf(sub.id, pdfFile)
+        return sub
+      }
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['submissions'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); onClose() },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['submissions'] })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      onClose()
+    },
     onError: (e: Error) => setError(e.message),
   })
 
-  const set = (k: keyof SubmissionCreate) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm((prev) => ({ ...prev, [k]: e.target.value }))
 
   return (
-    <Modal title="Add Submission" onClose={onClose}>
+    <Modal title={isEdit ? 'Edit Submission' : 'Add Submission'} onClose={onClose}>
       <div className="space-y-3">
         {error && <div className="text-red-600 text-sm">{error}</div>}
-        {(['member_name', 'provider_name', 'service_date', 'submitted_date'] as (keyof SubmissionCreate)[]).map((key) => (
+        {(['member_name', 'provider_name', 'service_date', 'submitted_date'] as const).map((key) => (
           <div key={key}>
-            <label className="block text-sm font-medium text-gray-700 mb-1 capitalize">{key.replace('_', ' ')}</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1 capitalize">{key.replace(/_/g, ' ')}</label>
             <input
               type={key.includes('date') ? 'date' : 'text'}
-              value={form[key] as string}
+              value={form[key]}
               onChange={set(key)}
+              list={key === 'member_name' ? 'member-options' : key === 'provider_name' ? 'provider-options' : undefined}
               className="w-full border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
         ))}
+        <datalist id="member-options">
+          {memberNames.map((n) => <option key={n} value={n} />)}
+        </datalist>
+        <datalist id="provider-options">
+          {providerNames.map((n) => <option key={n} value={n} />)}
+        </datalist>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Billed ($)</label>
             <input type="number" step="0.01" value={form.amount_billed}
-              onChange={(e) => setForm((p) => ({ ...p, amount_billed: parseFloat(e.target.value) || 0 }))}
+              onChange={(e) => setForm((p) => ({ ...p, amount_billed: e.target.value }))}
               className="w-full border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Expected ($)</label>
             <input type="number" step="0.01" value={form.expected_reimbursement}
-              onChange={(e) => setForm((p) => ({ ...p, expected_reimbursement: parseFloat(e.target.value) || 0 }))}
+              onChange={(e) => setForm((p) => ({ ...p, expected_reimbursement: e.target.value }))}
               className="w-full border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
         </div>
@@ -78,10 +111,12 @@ function AddModal({ onClose }: { onClose: () => void }) {
             </select>
           </div>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">PDF (optional)</label>
-          <input type="file" accept=".pdf" onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)} className="text-sm" />
-        </div>
+        {!isEdit && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">PDF (optional)</label>
+            <input type="file" accept=".pdf" onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)} className="text-sm" />
+          </div>
+        )}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
           <textarea value={form.notes ?? ''} onChange={set('notes')} rows={2}
@@ -91,7 +126,7 @@ function AddModal({ onClose }: { onClose: () => void }) {
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
           <button onClick={() => mutation.mutate()} disabled={mutation.isPending}
             className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-            {mutation.isPending ? 'Saving…' : 'Add Submission'}
+            {mutation.isPending ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Submission'}
           </button>
         </div>
       </div>
@@ -100,18 +135,23 @@ function AddModal({ onClose }: { onClose: () => void }) {
 }
 
 export default function Submissions() {
+  const { year } = useYear()
   const [showAdd, setShowAdd] = useState(false)
+  const [editing, setEditing] = useState<SubmissionResponse | null>(null)
   const [filterMember, setFilterMember] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
 
-  const params: Record<string, string> = {}
+  const params: Record<string, string> = { year: String(year) }
   if (filterMember) params.member = filterMember
   if (filterStatus !== 'all') params.status = filterStatus
 
   const { data, isLoading } = useQuery({
     queryKey: ['submissions', params],
-    queryFn: () => api.submissions.list(Object.keys(params).length ? params : undefined),
+    queryFn: () => api.submissions.list(params),
   })
+
+  const memberNames = [...new Set((data ?? []).map((s) => s.member_name))].sort()
+  const providerNames = [...new Set((data ?? []).map((s) => s.provider_name))].sort()
 
   return (
     <div>
@@ -137,7 +177,7 @@ export default function Submissions() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b">
               <tr>
-                {['Member', 'Provider', 'Service Date', 'Billed', 'Expected', 'Submitted', 'Status', 'Flags'].map((h) => (
+                {['Member', 'Provider', 'Service Date', 'Billed', 'Expected', 'Submitted', 'Match Status', 'Anthem Status', 'Plan Paid', 'Flags', ''].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -159,20 +199,56 @@ export default function Submissions() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
+                    {sub.anthem_claim_status ? (
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                        sub.anthem_claim_status === 'Approved' ? 'bg-green-100 text-green-700'
+                        : sub.anthem_claim_status === 'Denied' ? 'bg-red-100 text-red-700'
+                        : 'bg-amber-100 text-amber-700'
+                      }`}>
+                        {sub.anthem_claim_status}
+                      </span>
+                    ) : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    {sub.anthem_plan_paid != null ? formatCents(sub.anthem_plan_paid) : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-4 py-3">
                     <div className="flex gap-1 flex-wrap">
                       {sub.flags.map((f, i) => <AlertBadge key={i} flag={f.flag} severity={f.severity} />)}
                     </div>
                   </td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => setEditing(sub)}
+                      className="text-xs text-gray-400 hover:text-blue-600 transition-colors"
+                    >
+                      Edit
+                    </button>
+                  </td>
                 </tr>
               ))}
               {(data ?? []).length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No submissions</td></tr>
+                <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">No submissions</td></tr>
               )}
             </tbody>
           </table>
         </div>
       )}
-      {showAdd && <AddModal onClose={() => setShowAdd(false)} />}
+      {showAdd && (
+        <SubmissionModal
+          onClose={() => setShowAdd(false)}
+          memberNames={memberNames}
+          providerNames={providerNames}
+        />
+      )}
+      {editing && (
+        <SubmissionModal
+          onClose={() => setEditing(null)}
+          initial={editing}
+          memberNames={memberNames}
+          providerNames={providerNames}
+        />
+      )}
     </div>
   )
 }

@@ -51,6 +51,8 @@ class SubmissionResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     anthem_claim_number: Optional[str] = None
+    anthem_claim_status: Optional[str] = None
+    anthem_plan_paid: Optional[int] = None
     flags: list[AlertOut] = []
 
 

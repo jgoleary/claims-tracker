@@ -1,3 +1,6 @@
+from datetime import date
+from typing import Optional
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -27,13 +30,14 @@ def _get_latest_snapshots(db: Session) -> dict:
     return {s.network: s for s in snaps}
 
 
-def _get_csv_rollup(db: Session) -> dict:
+def _get_csv_rollup(db: Session, year: int) -> dict:
     """Sum deductible + coinsurance per network bucket for plan-year claims."""
+    start, end = config.plan_year_dates(year)
     claims = db.scalars(
         select(AnthemClaim)
         .where(
-            AnthemClaim.service_date >= config.PLAN_YEAR_START,
-            AnthemClaim.service_date <= config.PLAN_YEAR_END,
+            AnthemClaim.service_date >= start,
+            AnthemClaim.service_date <= end,
         )
         .options(selectinload(AnthemClaim.match).selectinload(Match.submission))
     ).all()
@@ -44,21 +48,29 @@ def _get_csv_rollup(db: Session) -> dict:
     }
 
     for claim in claims:
+        is_in_network = True  # unmatched claims default to in-network
         if claim.match and claim.match.submission:
-            treatment = claim.match.submission.network_treatment
-            bucket = "in_network" if treatment == "in_network_exception" else "out_of_network"
+            is_in_network = claim.match.submission.network_treatment == "in_network_exception"
+
+        if is_in_network:
+            # In-network spending counts toward both the in-network and OON accumulators.
+            rollup["in_network"]["deductible"] += claim.deductible
+            rollup["in_network"]["coinsurance"] += claim.coinsurance
+            rollup["out_of_network"]["deductible"] += claim.deductible
+            rollup["out_of_network"]["coinsurance"] += claim.coinsurance
         else:
-            bucket = "in_network"
-        rollup[bucket]["deductible"] += claim.deductible
-        rollup[bucket]["coinsurance"] += claim.coinsurance
+            rollup["out_of_network"]["deductible"] += claim.deductible
+            rollup["out_of_network"]["coinsurance"] += claim.coinsurance
 
     return rollup
 
 
 @router.get("/totals", response_model=TotalsResponse)
-def get_totals(db: Session = Depends(get_db)):
+def get_totals(year: Optional[int] = None, db: Session = Depends(get_db)):
+    if year is None:
+        year = date.today().year
     snaps = _get_latest_snapshots(db)
-    rollup = _get_csv_rollup(db)
+    rollup = _get_csv_rollup(db, year)
     result = {}
 
     for network in ("in_network", "out_of_network"):

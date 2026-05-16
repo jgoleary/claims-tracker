@@ -1,19 +1,27 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api'
 import { formatCents, formatDate } from '../utils'
+import { useYear } from '../context/YearContext'
 
 export default function AnthemClaims() {
+  const { year } = useYear()
   const [filterMatched, setFilterMatched] = useState('all')
   const [filterStatus, setFilterStatus] = useState('')
-  const params: Record<string, string> = {}
+  const params: Record<string, string> = { year: String(year) }
   if (filterMatched !== 'all') params.matched = filterMatched
   if (filterStatus) params.status = filterStatus
 
   const { data, isLoading } = useQuery({
     queryKey: ['anthem-claims', params],
-    queryFn: () => api.anthemClaims.list(Object.keys(params).length ? params : undefined),
+    queryFn: () => api.anthemClaims.list(params),
   })
+
+  const claims = data ?? []
+  const totalDeductible = claims.reduce((s, c) => s + c.deductible, 0)
+  const totalCoinsurance = claims.reduce((s, c) => s + c.coinsurance, 0)
+  const totalYourCost = claims.reduce((s, c) => s + c.your_cost, 0)
 
   return (
     <div>
@@ -38,16 +46,17 @@ export default function AnthemClaims() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b">
               <tr>
-                {['Claim #', 'Patient', 'Provider', 'Service Date', 'Status', 'Billed', 'Plan Paid', 'Your Cost', 'Matched'].map((h) => (
+                {['Patient', 'Provider', 'Service Date', 'Status', 'Billed', 'Plan Paid', 'Deductible', 'Coinsurance', 'Your Cost', 'Matched'].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {(data ?? []).map((c) => (
+              {claims.map((c) => (
                 <tr key={c.claim_number} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-mono text-xs text-gray-600">{c.claim_number}</td>
-                  <td className="px-4 py-3">{c.patient_name}</td>
+                  <td className="px-4 py-3">
+                    <Link to={`/anthem-claims/${encodeURIComponent(c.claim_number)}`} className="font-medium text-blue-600 hover:underline">{c.patient_name}</Link>
+                  </td>
                   <td className="px-4 py-3 text-gray-700">{c.provider_name}</td>
                   <td className="px-4 py-3 text-gray-500">{formatDate(c.service_date)}</td>
                   <td className="px-4 py-3">
@@ -55,14 +64,27 @@ export default function AnthemClaims() {
                   </td>
                   <td className="px-4 py-3">{formatCents(c.billed)}</td>
                   <td className="px-4 py-3">{formatCents(c.plan_paid)}</td>
+                  <td className="px-4 py-3">{formatCents(c.deductible)}</td>
+                  <td className="px-4 py-3">{formatCents(c.coinsurance)}</td>
                   <td className="px-4 py-3">{formatCents(c.your_cost)}</td>
                   <td className="px-4 py-3 text-center"><span className={c.is_matched ? 'text-green-600' : 'text-gray-300'}>✓</span></td>
                 </tr>
               ))}
-              {(data ?? []).length === 0 && (
-                <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">No claims imported yet</td></tr>
+              {claims.length === 0 && (
+                <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">No claims imported yet</td></tr>
               )}
             </tbody>
+            {claims.length > 0 && (
+              <tfoot className="bg-gray-50 border-t-2 border-gray-200">
+                <tr>
+                  <td colSpan={6} className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Totals ({claims.length})</td>
+                  <td className="px-4 py-3 font-semibold">{formatCents(totalDeductible)}</td>
+                  <td className="px-4 py-3 font-semibold">{formatCents(totalCoinsurance)}</td>
+                  <td className="px-4 py-3 font-semibold">{formatCents(totalYourCost)}</td>
+                  <td />
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       )}

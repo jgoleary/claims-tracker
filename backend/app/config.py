@@ -7,6 +7,7 @@ UNDERPAID_MIN_CENTS = 2_500   # $25.00
 UNDERPAID_PCT = 0.10          # 10%
 TOTALS_DRIFT_THRESHOLD_CENTS = 5_000  # $50.00
 
-# Plan year (update each January)
-PLAN_YEAR_START = date(2025, 1, 1)
-PLAN_YEAR_END = date(2025, 12, 31)
+
+def plan_year_dates(year: int) -> tuple[date, date]:
+    """Return (Jan 1, Dec 31) for the given calendar year."""
+    return date(year, 1, 1), date(year, 12, 31)

@@ -1,9 +1,11 @@
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import plan_year_dates
 from app.database import get_db
 from app.models import AnthemClaim
 from app.schemas import AnthemClaimResponse
@@ -42,9 +44,18 @@ def list_anthem_claims(
     matched: Optional[str] = None,
     status: Optional[str] = None,
     patient: Optional[str] = None,
+    year: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
-    claims = db.scalars(select(AnthemClaim)).all()
+    if year is None:
+        year = date.today().year
+    start, end = plan_year_dates(year)
+    claims = db.scalars(
+        select(AnthemClaim).where(
+            AnthemClaim.service_date >= start,
+            AnthemClaim.service_date <= end,
+        )
+    ).all()
     results = [_to_response(c) for c in claims]
 
     if matched == "true":

@@ -60,17 +60,17 @@ def ingest_claims_csv(db: Session, csv_bytes: bytes) -> IngestResult:
     updated_count = 0
 
     for row in reader:
-        claim_number = row['Claim #'].strip()
+        claim_number = (row.get('Claim #') or row.get('Claim Number', '')).strip()
         existing = db.get(AnthemClaim, claim_number)
 
         fields = {
-            'claim_type': row.get('Type', 'Medical').strip(),
+            'claim_type': (row.get('Claim Type') or row.get('Type', 'Medical')).strip(),
             'patient_name': _parse_patient_name(row['Patient']),
             'service_date': _parse_date(row['Service Date']),
-            'received_date': _parse_date(row.get('Received Date', '')),
+            'received_date': _parse_date(row.get('Claim Received') or row.get('Received Date', '')),
             'processed_date': _parse_date(row.get('Processed Date', '')),
             'status': _normalize_status(row['Status']),
-            'provider_name': row['Provider'].strip(),
+            'provider_name': (row.get('Provided By') or row.get('Provider', '')).strip(),
             'billed': _parse_money(row.get('Billed', '0')),
             'plan_discount': _parse_money(row.get('Plan Discount', '0')),
             'allowed': _parse_money(row.get('Allowed', '0')),

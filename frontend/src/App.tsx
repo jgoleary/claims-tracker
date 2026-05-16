@@ -5,6 +5,7 @@ import Submissions from './pages/Submissions'
 import SubmissionDetail from './pages/SubmissionDetail'
 import Matches from './pages/Matches'
 import AnthemClaims from './pages/AnthemClaims'
+import AnthemClaimDetail from './pages/AnthemClaimDetail'
 import Totals from './pages/Totals'
 import Refresh from './pages/Refresh'
 import Settings from './pages/Settings'
@@ -18,6 +19,7 @@ export default function App() {
         <Route path="submissions/:id" element={<SubmissionDetail />} />
         <Route path="matches" element={<Matches />} />
         <Route path="anthem-claims" element={<AnthemClaims />} />
+        <Route path="anthem-claims/:claimNumber" element={<AnthemClaimDetail />} />
         <Route path="totals" element={<Totals />} />
         <Route path="refresh" element={<Refresh />} />
         <Route path="settings" element={<Settings />} />

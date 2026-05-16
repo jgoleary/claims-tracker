@@ -1,8 +1,12 @@
+from datetime import date
+from typing import Optional
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.alerts import compute_flags
+from app.config import plan_year_dates
 from app.database import get_db
 from app.models import Submission
 from app.routes.submissions import _load_options
@@ -12,9 +16,14 @@ router = APIRouter()
 
 
 @router.get("/dashboard", response_model=DashboardResponse)
-def get_dashboard(db: Session = Depends(get_db)):
+def get_dashboard(year: Optional[int] = None, db: Session = Depends(get_db)):
+    if year is None:
+        year = date.today().year
+    start, end = plan_year_dates(year)
     submissions = db.scalars(
-        select(Submission).options(_load_options())
+        select(Submission)
+        .where(Submission.service_date >= start, Submission.service_date <= end)
+        .options(_load_options())
     ).all()
 
     counts = DashboardCounts()

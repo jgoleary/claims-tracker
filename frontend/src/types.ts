@@ -19,6 +19,8 @@ export interface SubmissionResponse {
   created_at: string
   updated_at: string
   anthem_claim_number: string | null
+  anthem_claim_status: 'Pending' | 'Approved' | 'Denied' | null
+  anthem_plan_paid: number | null
   flags: AlertOut[]
 }
 

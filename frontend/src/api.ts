@@ -67,14 +67,25 @@ export const api = {
     },
   },
   dashboard: {
-    get: () => req<DashboardResponse>('/dashboard'),
+    get: (year?: number) => {
+      const qs = year ? `?year=${year}` : ''
+      return req<DashboardResponse>(`/dashboard${qs}`)
+    },
   },
   totals: {
-    get: () => req<TotalsResponse>('/totals'),
+    get: (year?: number) => {
+      const qs = year ? `?year=${year}` : ''
+      return req<TotalsResponse>(`/totals${qs}`)
+    },
   },
   automation: {
     status: () => req<AutomationStatus>('/automation/status'),
-    run: () => req<{ detail: string }>('/automation/run', { method: 'POST' }),
+    run: (username: string, password: string) =>
+      req<{ detail: string }>('/automation/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      }),
   },
   providers: {
     aliases: () => req<ProviderAliasResponse[]>('/providers/aliases'),

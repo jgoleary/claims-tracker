@@ -1,5 +1,7 @@
 import json
+import os
 import subprocess
+import sys
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,7 +30,7 @@ def get_status() -> dict:
         return _read()
 
 
-def run_automation() -> bool:
+def run_automation(username: str = "", password: str = "") -> bool:
     """Spawn fetch_all.py in a background thread. Returns False if already running."""
     with _lock:
         state = _read()
@@ -37,13 +39,19 @@ def run_automation() -> bool:
         _write({"status": "running", "last_run_at": None, "summary": None})
 
     def _worker():
+        env = {**os.environ}
+        if username:
+            env["ANTHEM_USERNAME"] = username
+        if password:
+            env["ANTHEM_PASSWORD"] = password
         try:
             result = subprocess.run(
-                ["python", str(_SCRIPT)],
+                [sys.executable, str(_SCRIPT)],
                 cwd=str(_SCRIPT.parent.parent),
                 capture_output=True,
                 text=True,
                 timeout=300,
+                env=env,
             )
             summary = {
                 "returncode": result.returncode,

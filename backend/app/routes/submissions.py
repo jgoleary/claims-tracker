@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
@@ -8,7 +8,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.alerts import compute_flags
+from app.config import plan_year_dates
 from app.database import get_db
+from app.matching import run_matching
 from app.models import Match, Submission
 from app.schemas import AlertOut, SubmissionCreate, SubmissionResponse, SubmissionUpdate
 from app.storage import get_storage
@@ -34,6 +36,8 @@ def _to_response(submission: Submission) -> SubmissionResponse:
         created_at=submission.created_at,
         updated_at=submission.updated_at,
         anthem_claim_number=match.anthem_claim_number if match else None,
+        anthem_claim_status=match.anthem_claim.status if match and match.anthem_claim else None,
+        anthem_plan_paid=match.anthem_claim.plan_paid if match and match.anthem_claim else None,
         flags=[AlertOut(flag=a.flag, severity=a.severity, details=a.details) for a in flags],
     )
 
@@ -49,9 +53,16 @@ def list_submissions(
     flag: Optional[str] = None,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
+    year: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
-    q = select(Submission).options(_load_options())
+    if year is None:
+        year = date.today().year
+    start, end = plan_year_dates(year)
+    q = select(Submission).where(
+        Submission.service_date >= start,
+        Submission.service_date <= end,
+    ).order_by(Submission.service_date.desc()).options(_load_options())
     submissions = db.scalars(q).all()
 
     results = [_to_response(s) for s in submissions]
@@ -78,7 +89,7 @@ def create_submission(body: SubmissionCreate, db: Session = Depends(get_db)):
     )
     db.add(sub)
     db.commit()
-    db.refresh(sub)
+    run_matching(db)
 
     # Re-query with relationships loaded
     sub = db.scalars(
@@ -106,6 +117,7 @@ def update_submission(id: str, body: SubmissionUpdate, db: Session = Depends(get
         setattr(sub, field, value)
     sub.updated_at = datetime.now(timezone.utc)
     db.commit()
+    run_matching(db)
     sub = db.scalars(
         select(Submission).where(Submission.id == id).options(_load_options())
     ).one()

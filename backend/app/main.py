@@ -9,6 +9,7 @@ from app.routes import (
     ingest,
     matches,
     providers,
+    settings,
     submissions,
     totals,
 )
@@ -31,6 +32,7 @@ app.include_router(dashboard.router, prefix="/api")
 app.include_router(totals.router, prefix="/api")
 app.include_router(automation.router, prefix="/api")
 app.include_router(providers.router, prefix="/api")
+app.include_router(settings.router, prefix="/api")
 
 
 @app.on_event("startup")

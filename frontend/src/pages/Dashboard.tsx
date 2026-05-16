@@ -1,36 +1,17 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { api } from '../api'
 import AlertBadge from '../components/Alert'
-
+import { useYear } from '../context/YearContext'
 
 export default function Dashboard() {
-  const qc = useQueryClient()
+  const { year } = useYear()
   const [activeFlag, setActiveFlag] = useState<string | null>(null)
-  const [automationMsg, setAutomationMsg] = useState<string | null>(null)
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['dashboard'],
-    queryFn: api.dashboard.get,
-  })
-
-  const { data: automationStatus } = useQuery({
-    queryKey: ['automation-status'],
-    queryFn: api.automation.status,
-    refetchInterval: (q) => q.state.data?.status === 'running' ? 3_000 : false,
-  })
-
-  const runMutation = useMutation({
-    mutationFn: api.automation.run,
-    onSuccess: (res) => {
-      setAutomationMsg(res.detail)
-      qc.invalidateQueries({ queryKey: ['automation-status'] })
-      setTimeout(() => {
-        qc.invalidateQueries({ queryKey: ['dashboard'] })
-        qc.invalidateQueries({ queryKey: ['submissions'] })
-      }, 5_000)
-    },
+    queryKey: ['dashboard', year],
+    queryFn: () => api.dashboard.get(year),
   })
 
   if (isLoading) return <div className="text-gray-500">Loading...</div>
@@ -46,24 +27,10 @@ export default function Dashboard() {
   ]
 
   const visibleAlerts = activeFlag ? data.alerts.filter((a) => a.flag === activeFlag) : data.alerts
-  const isRunning = automationStatus?.status === 'running'
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <div className="flex items-center gap-3">
-          {automationMsg && <span className="text-sm text-gray-500">{automationMsg}</span>}
-          {automationStatus?.status === 'complete' && <span className="text-sm text-green-600">Last refresh complete</span>}
-          <button
-            onClick={() => runMutation.mutate()}
-            disabled={isRunning || runMutation.isPending}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isRunning ? 'Refreshing...' : 'Refresh Data'}
-          </button>
-        </div>
-      </div>
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">Dashboard</h1>
 
       <div className="grid grid-cols-4 gap-4 mb-6">
         {countItems.map(({ flag, label, count, color }) => (

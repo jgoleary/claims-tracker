@@ -49,7 +49,7 @@ def compute_flags(submission, match=None) -> list[Alert]:
                 "diff_cents": diff,
             }))
 
-        if claim.plan_paid == 0 and claim.your_cost > 0:
+        if claim.plan_paid == 0 and claim.your_cost > 0 and submission.expected_reimbursement > 0:
             alerts.append(Alert("APPROVED_ZERO_PAID", "info", {
                 "your_cost_cents": claim.your_cost,
             }))

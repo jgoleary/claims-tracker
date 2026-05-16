@@ -6,6 +6,8 @@ import { formatDate } from '../utils'
 
 export default function Refresh() {
   const qc = useQueryClient()
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [csvResult, setCsvResult] = useState<IngestSummary | null>(null)
   const [csvError, setCsvError] = useState<string | null>(null)
 
@@ -16,8 +18,12 @@ export default function Refresh() {
   })
 
   const runMutation = useMutation({
-    mutationFn: api.automation.run,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['automation-status'] }),
+    mutationFn: () => api.automation.run(username, password),
+    onSuccess: () => {
+      setUsername('')
+      setPassword('')
+      qc.invalidateQueries({ queryKey: ['automation-status'] })
+    },
   })
 
   const csvMutation = useMutation({
@@ -33,15 +39,43 @@ export default function Refresh() {
   })
 
   const isRunning = status?.status === 'running'
+
   return (
     <div className="max-w-2xl">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Refresh Data</h1>
       <div className="bg-white border rounded-lg p-6 shadow-sm mb-6">
         <h2 className="font-semibold text-gray-900 mb-1">Run Automation</h2>
-        <p className="text-sm text-gray-500 mb-4">Launches the Playwright script. Chromium will open — log in and complete MFA if prompted.</p>
+        <p className="text-sm text-gray-500 mb-4">Launches the Playwright script. Chromium will open — complete MFA if prompted.</p>
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+            <input
+              type="email"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="you@example.com"
+              disabled={isRunning}
+              className="w-full border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              disabled={isRunning}
+              className="w-full border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            />
+          </div>
+        </div>
         <div className="flex items-center gap-4">
-          <button onClick={() => runMutation.mutate()} disabled={isRunning || runMutation.isPending}
-            className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+          <button
+            onClick={() => runMutation.mutate()}
+            disabled={isRunning || runMutation.isPending || !username || !password}
+            className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             {isRunning ? 'Running…' : 'Refresh Now'}
           </button>
           {status && (
@@ -51,6 +85,13 @@ export default function Refresh() {
             </span>
           )}
         </div>
+        {status?.summary && (status.status === 'complete' || status.status === 'failed') && (
+          <div className={`mt-4 rounded p-3 text-xs font-mono whitespace-pre-wrap ${status.status === 'failed' ? 'bg-red-50 text-red-800' : 'bg-gray-50 text-gray-700'}`}>
+            {(status.summary as Record<string, string>).stdout || ''}
+            {(status.summary as Record<string, string>).stderr ? `\n[stderr]\n${(status.summary as Record<string, string>).stderr}` : ''}
+            {(status.summary as Record<string, string>).error || ''}
+          </div>
+        )}
       </div>
       <div className="bg-white border rounded-lg p-6 shadow-sm">
         <h2 className="font-semibold text-gray-900 mb-1">Manual CSV Upload</h2>
