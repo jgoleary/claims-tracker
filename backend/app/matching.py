@@ -40,5 +40,57 @@ class MatchResult:
 
 
 def run_matching(db: Session) -> MatchResult:
-    # Implemented in Task 6
-    raise NotImplementedError
+    result = MatchResult()
+
+    unmatched_submissions = db.scalars(
+        select(Submission).where(
+            ~exists().where(Match.submission_id == Submission.id)
+        )
+    ).all()
+
+    unmatched_claims = db.scalars(
+        select(AnthemClaim).where(
+            ~exists().where(Match.anthem_claim_number == AnthemClaim.claim_number)
+        )
+    ).all()
+
+    aliases = [
+        (a.canonical_name, a.anthem_name)
+        for a in db.scalars(select(ProviderAlias)).all()
+    ]
+
+    newly_matched_claims: set[str] = set()
+
+    for submission in unmatched_submissions:
+        norm_member = normalize(submission.member_name)
+
+        candidates = [
+            c for c in unmatched_claims
+            if c.claim_number not in newly_matched_claims
+            and c.service_date == submission.service_date
+            and normalize(c.patient_name) == norm_member
+        ]
+
+        if not candidates:
+            continue
+
+        tier1 = [
+            c for c in candidates
+            if _provider_matches(submission.provider_name, c.provider_name, aliases)
+        ]
+
+        if len(tier1) == 1:
+            db.add(Match(
+                submission_id=submission.id,
+                anthem_claim_number=tier1[0].claim_number,
+                match_type="auto",
+            ))
+            newly_matched_claims.add(tier1[0].claim_number)
+            result.auto_matched.append((submission.id, tier1[0].claim_number))
+        elif len(tier1) > 1:
+            result.suggestions.append((submission.id, [c.claim_number for c in tier1]))
+        else:
+            result.suggestions.append((submission.id, [c.claim_number for c in candidates]))
+
+    db.commit()
+    return result
