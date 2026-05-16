@@ -1,10 +1,14 @@
 import pytest
 import uuid
 from datetime import date
+from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+from fastapi.testclient import TestClient
 
 from app.models import Base, Submission, AnthemClaim
+from app import storage as _storage_module
+from app.storage import LocalFileStorage
 
 
 @pytest.fixture(scope="function")
@@ -89,3 +93,24 @@ def make_claim(db: Session):
         db.refresh(c)
         return c
     return factory
+
+
+@pytest.fixture
+def test_storage(tmp_path: Path) -> LocalFileStorage:
+    return LocalFileStorage(tmp_path / "pdfs")
+
+
+@pytest.fixture
+def client(db: Session, test_storage: LocalFileStorage, monkeypatch):
+    from app.main import app
+    from app.database import get_db
+
+    monkeypatch.setattr(_storage_module, "_default_storage", test_storage)
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()
