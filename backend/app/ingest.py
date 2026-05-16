@@ -1,7 +1,7 @@
 import csv
 import io
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -55,7 +55,7 @@ def ingest_claims_csv(db: Session, csv_bytes: bytes) -> IngestResult:
     text = csv_bytes.decode('utf-8-sig')  # utf-8-sig strips BOM if present
     reader = csv.DictReader(io.StringIO(text))
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     new_count = 0
     updated_count = 0
 
@@ -104,7 +104,7 @@ def ingest_claims_csv(db: Session, csv_bytes: bytes) -> IngestResult:
 
 
 def ingest_benefits(db: Session, data: dict) -> None:
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     for network_key, network_data in data.items():
         db.add(BenefitsSnapshot(
             snapshot_date=now,
