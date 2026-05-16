@@ -25,24 +25,11 @@ def _provider_matches(
 
     if n_sub == n_claim:
         return True
-
-    # Collect all values mentioned in aliases to check directionality
-    all_alias_values = set()
-    for canonical, anthem in alias_pairs:
-        all_alias_values.add(canonical)
-        all_alias_values.add(anthem)
-
-    # If either provider is involved in any alias, only use alias matching
-    if n_sub in all_alias_values or n_claim in all_alias_values:
-        for canonical, anthem in alias_pairs:
-            if canonical == n_sub and anthem == n_claim:
-                return True
-        return False
-
-    # Otherwise, allow prefix matching (for Anthem truncation and abbreviations)
     if n_sub.startswith(n_claim) or n_claim.startswith(n_sub):
         return True
-
+    for canonical, anthem in alias_pairs:
+        if canonical == n_sub and anthem == n_claim:
+            return True
     return False
 
 

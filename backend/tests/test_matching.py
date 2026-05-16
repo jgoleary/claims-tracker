@@ -46,11 +46,6 @@ class TestProviderMatches:
     def test_no_match(self):
         assert not _provider_matches("Dr. Smith", "Joyful Behavior Therapy", [])
 
-    def test_alias_wrong_direction_no_match(self):
-        # Aliases are directional: canonical -> anthem
-        aliases = [("citrus speech", "citrus speech and language")]
-        assert not _provider_matches("Citrus Speech and Language", "Citrus Speech", aliases)
-
     def test_prefix_match_with_unrelated_aliases_present(self):
         # Aliases exist but don't involve these providers — prefix match should still work
         aliases = [("citrus speech", "citrus speech and language")]
