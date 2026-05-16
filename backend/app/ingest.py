@@ -52,10 +52,66 @@ class IngestResult:
 
 
 def ingest_claims_csv(db: Session, csv_bytes: bytes) -> IngestResult:
-    # Implemented in Task 8
-    raise NotImplementedError
+    text = csv_bytes.decode('utf-8-sig')  # utf-8-sig strips BOM if present
+    reader = csv.DictReader(io.StringIO(text))
+
+    now = datetime.utcnow()
+    new_count = 0
+    updated_count = 0
+
+    for row in reader:
+        claim_number = row['Claim #'].strip()
+        existing = db.get(AnthemClaim, claim_number)
+
+        fields = {
+            'claim_type': row.get('Type', 'Medical').strip(),
+            'patient_name': _parse_patient_name(row['Patient']),
+            'service_date': _parse_date(row['Service Date']),
+            'received_date': _parse_date(row.get('Received Date', '')),
+            'processed_date': _parse_date(row.get('Processed Date', '')),
+            'status': _normalize_status(row['Status']),
+            'provider_name': row['Provider'].strip(),
+            'billed': _parse_money(row.get('Billed', '0')),
+            'plan_discount': _parse_money(row.get('Plan Discount', '0')),
+            'allowed': _parse_money(row.get('Allowed', '0')),
+            'plan_paid': _parse_money(row.get('Plan Paid', '0')),
+            'additional_savings': _parse_money(row.get('Additional Savings', '0')),
+            'deductible': _parse_money(row.get('Deductible', '0')),
+            'coinsurance': _parse_money(row.get('Coinsurance', '0')),
+            'copay': _parse_money(row.get('Copay', '0')),
+            'not_covered': _parse_money(row.get('Not Covered', '0')),
+            'your_cost': _parse_money(row.get('Your Cost', '0')),
+            'last_seen_at': now,
+        }
+
+        if existing:
+            for k, v in fields.items():
+                setattr(existing, k, v)
+            updated_count += 1
+        else:
+            db.add(AnthemClaim(claim_number=claim_number, first_seen_at=now, **fields))
+            new_count += 1
+
+    db.commit()
+
+    match_result = run_matching(db)
+    return IngestResult(
+        new=new_count,
+        updated=updated_count,
+        auto_matched=len(match_result.auto_matched),
+        suggestions=len(match_result.suggestions),
+    )
 
 
 def ingest_benefits(db: Session, data: dict) -> None:
-    # Implemented in Task 8
-    raise NotImplementedError
+    now = datetime.utcnow()
+    for network_key, network_data in data.items():
+        db.add(BenefitsSnapshot(
+            snapshot_date=now,
+            network=network_key,
+            deductible_limit=_parse_money(str(network_data['deductible_limit'])),
+            deductible_spent=_parse_money(str(network_data['deductible_spent'])),
+            oop_limit=_parse_money(str(network_data['oop_limit'])),
+            oop_spent=_parse_money(str(network_data['oop_spent'])),
+        ))
+    db.commit()
