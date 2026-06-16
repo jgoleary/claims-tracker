@@ -123,6 +123,7 @@ class DashboardCounts(BaseModel):
     stale_pending: int = 0
     denied: int = 0
     underpaid: int = 0
+    vanished: int = 0
 
 
 class DashboardAlert(BaseModel):

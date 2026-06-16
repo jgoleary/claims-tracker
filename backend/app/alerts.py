@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
+from typing import Optional
 
 from app import config
 
@@ -11,8 +12,19 @@ class Alert:
     details: dict = field(default_factory=dict)
 
 
-def compute_flags(submission, match=None) -> list[Alert]:
-    """Compute alert flags for a submission. match is the Match ORM object or None."""
+def _fmt_ts(dt: datetime) -> str:
+    """Format a timestamp for display as a date only — time isn't meaningful here."""
+    return dt.date().isoformat()
+
+
+def compute_flags(submission, match=None, latest_ingest_at: Optional[datetime] = None) -> list[Alert]:
+    """Compute alert flags for a submission. match is the Match ORM object or None.
+
+    latest_ingest_at is the timestamp of the most recent claims ingest (the max
+    last_seen_at across all anthem_claims). When provided, a matched claim whose
+    last_seen_at predates it — i.e. it dropped out of Anthem's latest export — is
+    flagged VANISHED.
+    """
     alerts: list[Alert] = []
     today = date.today()
 
@@ -26,6 +38,12 @@ def compute_flags(submission, match=None) -> list[Alert]:
         return alerts
 
     claim = match.anthem_claim
+
+    if latest_ingest_at is not None and claim.last_seen_at < latest_ingest_at:
+        alerts.append(Alert("VANISHED", "red", {
+            "last_seen_at": _fmt_ts(claim.last_seen_at),
+            "latest_ingest_at": _fmt_ts(latest_ingest_at),
+        }))
 
     if (claim.status == "Pending"
             and claim.received_date is not None

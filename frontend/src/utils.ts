@@ -20,4 +20,5 @@ export const FLAG_LABELS: Record<string, string> = {
   DENIED: 'Denied',
   UNDERPAID: 'Underpaid',
   APPROVED_ZERO_PAID: 'Zero Paid',
+  VANISHED: 'Vanished',
 }

@@ -24,7 +24,7 @@ def test_dashboard_empty(client):
     resp = client.get("/api/dashboard")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["counts"] == {"missing": 0, "stale_pending": 0, "denied": 0, "underpaid": 0}
+    assert data["counts"] == {"missing": 0, "stale_pending": 0, "denied": 0, "underpaid": 0, "vanished": 0}
     assert data["alerts"] == []
 
 

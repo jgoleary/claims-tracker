@@ -77,6 +77,7 @@ export interface DashboardCounts {
   stale_pending: number
   denied: number
   underpaid: number
+  vanished: number
 }
 
 export interface DashboardAlert {

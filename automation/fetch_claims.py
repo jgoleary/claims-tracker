@@ -12,7 +12,7 @@ from playwright.sync_api import Page, sync_playwright
 
 import auth
 
-CLAIMS_URL = "https://membersecure.anthem.com/member/claims/summary"
+CLAIMS_URL = "https://membersecure.anthem.com/member/claims"
 BACKEND_URL = "http://localhost:8000"
 DATA_DIR = Path("data/exports")
 

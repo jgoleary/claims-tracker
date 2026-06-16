@@ -8,7 +8,7 @@ def _add_claim(db, claim_number="CLM-001", status="Pending"):
         claim_number=claim_number,
         claim_type="Medical",
         patient_name="James OLeary",
-        service_date=date(2025, 11, 4),
+        service_date=date.today(),
         status=status,
         provider_name="Joyful Behavior Therapy",
         billed=240_000, plan_discount=0, allowed=240_000,

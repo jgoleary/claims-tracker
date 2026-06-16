@@ -44,7 +44,7 @@ export default function Settings() {
         <h2 className="font-semibold text-gray-900 mb-1">Alert Thresholds</h2>
         <p className="text-sm text-gray-500 mb-3">Edit <code className="bg-gray-100 px-1 rounded text-xs">backend/app/config.py</code> to change these.</p>
         <dl className="space-y-2 text-sm">
-          {[['MISSING after', '30 days'], ['STALE_PENDING after', '45 days'], ['UNDERPAID threshold', '$25 or 10%'], ['Totals drift', '$50']].map(([label, value]) => (
+          {[['MISSING after', '30 days'], ['STALE_PENDING after', '30 days'], ['VANISHED', 'gone from latest export'], ['UNDERPAID threshold', '$25 or 10%'], ['Totals drift', '$50']].map(([label, value]) => (
             <div key={label} className="flex justify-between">
               <dt className="text-gray-500">{label}</dt>
               <dd className="font-medium text-gray-900">{value}</dd>

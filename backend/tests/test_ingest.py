@@ -31,6 +31,17 @@ class TestParseDate:
     def test_iso_format(self):
         assert _parse_date("2025-11-04") == date(2025, 11, 4)
 
+    def test_anthem_abbreviated_month(self):
+        assert _parse_date("May 26, 2026") == date(2026, 5, 26)
+        assert _parse_date("Jun 1, 2026") == date(2026, 6, 1)
+
+    def test_anthem_full_month(self):
+        assert _parse_date("November 4, 2025") == date(2025, 11, 4)
+
+    def test_unrecognized_format_raises(self):
+        with pytest.raises(ValueError):
+            _parse_date("05/26/2026")
+
     def test_not_available(self):
         assert _parse_date("Not Available") is None
 
@@ -42,14 +53,17 @@ class TestParseDate:
 
 
 class TestParsePatientName:
-    def test_strips_dob(self):
-        assert _parse_patient_name("Nolan O'leary (2019-02-14)") == "Nolan O'leary"
+    def test_strips_dob_and_surname(self):
+        assert _parse_patient_name("Nolan O'leary (2019-02-14)") == "Nolan"
+
+    def test_first_name_only_with_dob(self):
+        assert _parse_patient_name("Nolan (02/14/2019)") == "Nolan"
 
     def test_no_dob(self):
-        assert _parse_patient_name("James OLeary") == "James OLeary"
+        assert _parse_patient_name("James OLeary") == "James"
 
     def test_strips_whitespace(self):
-        assert _parse_patient_name("  James OLeary  ") == "James OLeary"
+        assert _parse_patient_name("  James OLeary  ") == "James"
 
 
 class TestNormalizeStatus:
@@ -106,7 +120,7 @@ class TestIngestClaimsCSV:
     def test_parses_patient_name(self, db: Session):
         ingest_claims_csv(db, SAMPLE_CSV.encode())
         clm1 = db.get(AnthemClaim, "CLM-001")
-        assert clm1.patient_name == "James OLeary"
+        assert clm1.patient_name == "James"
 
     def test_triggers_matching(self, db: Session, make_submission):
         make_submission(

@@ -14,6 +14,14 @@ def normalize(s: str) -> str:
     return s
 
 
+def _first_name(s: str) -> str:
+    """Normalized first name only. Anthem claims store first-name-only patient
+    names, while submissions may hold a full member name — compare on first name
+    so the two still link."""
+    parts = normalize(s).split(' ')
+    return parts[0] if parts and parts[0] else ''
+
+
 def _provider_matches(
     sub_provider: str,
     claim_provider: str,
@@ -62,13 +70,13 @@ def run_matching(db: Session) -> MatchResult:
     newly_matched_claims: set[str] = set()
 
     for submission in unmatched_submissions:
-        norm_member = normalize(submission.member_name)
+        member_first = _first_name(submission.member_name)
 
         candidates = [
             c for c in unmatched_claims
             if c.claim_number not in newly_matched_claims
             and c.service_date == submission.service_date
-            and normalize(c.patient_name) == norm_member
+            and _first_name(c.patient_name) == member_first
         ]
 
         if not candidates:
