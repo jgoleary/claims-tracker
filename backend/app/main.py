@@ -1,7 +1,10 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import init_db
+from app.static_serve import create_spa_router
 from app.routes import (
     anthem_claims,
     automation,
@@ -38,3 +41,8 @@ app.include_router(settings.router, prefix="/api")
 @app.on_event("startup")
 def on_startup() -> None:
     init_db()
+
+
+_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+if _DIST.exists():
+    app.include_router(create_spa_router(_DIST))
