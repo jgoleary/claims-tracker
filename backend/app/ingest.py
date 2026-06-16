@@ -19,20 +19,40 @@ def _parse_money(s: str) -> int:
 
 
 def _parse_date(s: str) -> Optional[date]:
-    """Parse 'YYYY-MM-DD' to date, or return None for empty/'Not Available'."""
+    """Parse a claim date, or return None for empty/'Not Available'.
+
+    Accepts ISO ('2026-05-26') and Anthem's display format ('May 26, 2026',
+    with abbreviated or full month names).
+    """
     s = s.strip()
     if not s or s.lower() == 'not available':
         return None
-    return date.fromisoformat(s)
+    try:
+        return date.fromisoformat(s)
+    except ValueError:
+        pass
+    for fmt in ('%b %d, %Y', '%B %d, %Y'):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f"Unrecognized date format: {s!r}")
 
 
 def _parse_patient_name(s: str) -> str:
-    """Parse 'Nolan O'leary (2019-02-14)' -> 'Nolan O'leary'."""
+    """Parse "Nolan O'leary (2019-02-14)" -> "Nolan" (first name only).
+
+    Anthem's export carries the patient's name plus a DOB, but the name part is
+    inconsistent across exports — sometimes "First Last", sometimes just "First".
+    We canonicalize to the first name so the same person isn't fragmented into
+    multiple patient_name values. The DOB and any surname are dropped.
+    """
     s = s.strip()
     idx = s.rfind(' (')
     if idx != -1:
-        return s[:idx]
-    return s
+        s = s[:idx]
+    parts = s.split()
+    return parts[0] if parts else s
 
 
 def _normalize_status(s: str) -> str:

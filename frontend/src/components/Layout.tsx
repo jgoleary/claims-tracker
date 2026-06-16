@@ -26,7 +26,7 @@ export default function Layout() {
   })
 
   const totalAlerts = dash
-    ? dash.counts.missing + dash.counts.denied + dash.counts.stale_pending + dash.counts.underpaid
+    ? dash.counts.missing + dash.counts.denied + dash.counts.stale_pending + dash.counts.underpaid + dash.counts.vanished
     : 0
 
   return (

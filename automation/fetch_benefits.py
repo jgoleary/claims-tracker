@@ -23,12 +23,18 @@ _IN_NETWORK_TAB_ID = "ant-tab-body-1-0"
 _OON_TAB_ID = "ant-tab-body-1-1"
 
 # Selectors to click the Out-of-Network tab (loads OON data on demand).
+# The tab button carries aria-controls="<panel id>", a stable link to the panel
+# we scrape — prefer it over text matching (Anthem's label reads "Out of Network").
 _OON_TAB_CLICK = [
-    '[role="tab"]:has-text("Out-of-Network")',
+    f'[role="tab"][aria-controls="{_OON_TAB_ID}"]',
     '[role="tab"]:has-text("Out of Network")',
-    'button:has-text("Out-of-Network")',
-    'a:has-text("Out-of-Network")',
+    '[role="tab"]:has-text("Out-of-Network")',
+    'button:has-text("Out of Network")',
 ]
+
+# A tab's benefit amounts have rendered once this selector resolves inside it.
+def _amounts_selector(tab_id: str) -> str:
+    return f"#{tab_id} .progress-bar-amount .label-text"
 
 
 def scrape_benefits(page: Page) -> dict:
@@ -57,7 +63,12 @@ def _click_oon_tab(page: Page) -> None:
             el = page.wait_for_selector(sel, timeout=5_000, state="visible")
             if el:
                 el.click()
-                page.wait_for_timeout(800)
+                # OON content renders lazily on activation — wait for the panel's
+                # own amounts to appear rather than guessing a fixed delay.
+                try:
+                    page.wait_for_selector(_amounts_selector(_OON_TAB_ID), timeout=10_000)
+                except Exception:
+                    page.wait_for_timeout(800)
                 return
         except Exception:
             continue
@@ -76,14 +87,26 @@ def _scrape_tab(page: Page, tab_id: str, label: str) -> dict:
     print(f"  Scraping {label}…")
     tab = page.locator(f"#{tab_id}")
 
+    # Wait for this panel's amounts to render. The default tab is ready on page
+    # load, but the OON panel renders lazily after its tab is activated, so an
+    # immediate read can race ahead of Angular and find nothing.
+    try:
+        page.wait_for_selector(_amounts_selector(tab_id), timeout=10_000)
+    except Exception:
+        pass  # fall through to the count check below for a clear, diagnostic error
+
     limit_spans = tab.locator('span:has-text("Your limit is $")').all()
     amount_spans = tab.locator(".progress-bar-amount .label-text").all()
 
     if len(amount_spans) < 2:
+        tab_present = tab.count() > 0
+        bars = tab.locator(".progress-bar-amount").count() if tab_present else 0
         raise RuntimeError(
             f"Could not find benefit amounts for {label} "
-            f"(found {len(amount_spans)} .progress-bar-amount .label-text spans). "
-            "Open the benefits page manually and update selectors in fetch_benefits.py."
+            f"(found {len(amount_spans)} .progress-bar-amount .label-text spans; "
+            f"tab #{tab_id} present={tab_present}, .progress-bar-amount divs={bars}). "
+            "If the tab is present but empty, the panel did not render in time or "
+            "the tab did not activate; otherwise update selectors in fetch_benefits.py."
         )
 
     def get_text(spans: list, idx: int) -> str:

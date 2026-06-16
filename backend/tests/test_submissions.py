@@ -1,17 +1,22 @@
 import uuid
+from datetime import date
 from fastapi.testclient import TestClient
 
 
 BASE = "/api/submissions"
 
+# Anchored to today so the submission stays in the current plan year and recent
+# enough to avoid the MISSING flag — keeps these tests from rotting over time.
+_TODAY = date.today().isoformat()
+
 SUBMISSION_BODY = {
     "member_name": "James OLeary",
     "provider_name": "Joyful Behavior Therapy",
-    "service_date": "2026-04-28",
+    "service_date": _TODAY,
     "amount_billed": 240000,
     "expected_reimbursement": 180000,
     "network_treatment": "out_of_network",
-    "submitted_date": "2026-05-01",
+    "submitted_date": _TODAY,
     "submission_method": "portal",
 }
 

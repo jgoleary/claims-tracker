@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from unittest.mock import MagicMock
 import pytest
 
@@ -14,12 +14,14 @@ def _make_submission(submitted_date=None, expected_reimbursement=180_000, networ
     return s
 
 
-def _make_match(status="Pending", plan_paid=0, your_cost=0, received_date=None, plan_paid_val=None):
+def _make_match(status="Pending", plan_paid=0, your_cost=0, received_date=None, plan_paid_val=None,
+                last_seen_at=None):
     claim = MagicMock()
     claim.status = status
     claim.plan_paid = plan_paid_val if plan_paid_val is not None else plan_paid
     claim.your_cost = your_cost
     claim.received_date = received_date
+    claim.last_seen_at = last_seen_at or datetime(2026, 6, 16, 12, 0, 0)
     match = MagicMock()
     match.anthem_claim = claim
     return match
@@ -78,3 +80,28 @@ class TestComputeFlags:
         match = _make_match(status="Approved", plan_paid_val=0, your_cost=0)
         flags = compute_flags(sub, match=match)
         assert not any(f.flag == "APPROVED_ZERO_PAID" for f in flags)
+
+    def test_vanished_flag_when_claim_older_than_latest_ingest(self):
+        sub = _make_submission()
+        match = _make_match(last_seen_at=datetime(2026, 5, 22, 6, 6, 47, 266333))
+        flags = compute_flags(sub, match=match,
+                              latest_ingest_at=datetime(2026, 6, 16, 20, 51, 33, 128513))
+        vanished = [f for f in flags if f.flag == "VANISHED"]
+        assert len(vanished) == 1
+        assert vanished[0].severity == "red"
+        # Displayed timestamps are date-only — the time of day isn't meaningful.
+        assert vanished[0].details["last_seen_at"] == "2026-05-22"
+        assert vanished[0].details["latest_ingest_at"] == "2026-06-16"
+
+    def test_no_vanished_when_claim_seen_in_latest_ingest(self):
+        sub = _make_submission()
+        latest = datetime(2026, 6, 16, 20, 0, 0)
+        match = _make_match(last_seen_at=latest)
+        flags = compute_flags(sub, match=match, latest_ingest_at=latest)
+        assert not any(f.flag == "VANISHED" for f in flags)
+
+    def test_no_vanished_when_latest_ingest_unknown(self):
+        sub = _make_submission()
+        match = _make_match(last_seen_at=datetime(2026, 5, 22, 6, 0, 0))
+        flags = compute_flags(sub, match=match, latest_ingest_at=None)
+        assert not any(f.flag == "VANISHED" for f in flags)

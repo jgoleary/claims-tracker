@@ -9,7 +9,7 @@ from app.alerts import compute_flags
 from app.config import plan_year_dates
 from app.database import get_db
 from app.models import Submission
-from app.routes.submissions import _load_options
+from app.routes.submissions import _load_options, latest_ingest_at
 from app.schemas import DashboardAlert, DashboardCounts, DashboardResponse
 
 router = APIRouter()
@@ -28,9 +28,10 @@ def get_dashboard(year: Optional[int] = None, db: Session = Depends(get_db)):
 
     counts = DashboardCounts()
     alerts: list[DashboardAlert] = []
+    latest_ingest = latest_ingest_at(db)
 
     for sub in submissions:
-        flags = compute_flags(sub, sub.match)
+        flags = compute_flags(sub, sub.match, latest_ingest_at=latest_ingest)
         for flag in flags:
             alerts.append(DashboardAlert(
                 submission_id=sub.id,
@@ -46,6 +47,8 @@ def get_dashboard(year: Optional[int] = None, db: Session = Depends(get_db)):
                 counts.denied += 1
             elif flag.flag == "UNDERPAID":
                 counts.underpaid += 1
+            elif flag.flag == "VANISHED":
+                counts.vanished += 1
 
     # Sort: red first, then yellow, then info
     severity_order = {"red": 0, "yellow": 1, "info": 2}

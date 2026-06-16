@@ -4,23 +4,29 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.alerts import compute_flags
 from app.config import plan_year_dates
 from app.database import get_db
 from app.matching import run_matching
-from app.models import Match, Submission
+from app.models import AnthemClaim, Match, Submission
 from app.schemas import AlertOut, SubmissionCreate, SubmissionResponse, SubmissionUpdate
 from app.storage import get_storage
 
 router = APIRouter()
 
 
-def _to_response(submission: Submission) -> SubmissionResponse:
+def latest_ingest_at(db: Session) -> Optional[datetime]:
+    """Timestamp of the most recent claims ingest (max last_seen_at across all
+    anthem_claims). Used to detect claims that dropped out of Anthem's export."""
+    return db.scalar(select(func.max(AnthemClaim.last_seen_at)))
+
+
+def _to_response(submission: Submission, latest_ingest: Optional[datetime] = None) -> SubmissionResponse:
     match = submission.match
-    flags = compute_flags(submission, match)
+    flags = compute_flags(submission, match, latest_ingest_at=latest_ingest)
     return SubmissionResponse(
         id=submission.id,
         member_name=submission.member_name,
@@ -65,7 +71,8 @@ def list_submissions(
     ).order_by(Submission.service_date.desc()).options(_load_options())
     submissions = db.scalars(q).all()
 
-    results = [_to_response(s) for s in submissions]
+    latest_ingest = latest_ingest_at(db)
+    results = [_to_response(s, latest_ingest) for s in submissions]
 
     if member:
         results = [r for r in results if member.lower() in r.member_name.lower()]
@@ -95,7 +102,7 @@ def create_submission(body: SubmissionCreate, db: Session = Depends(get_db)):
     sub = db.scalars(
         select(Submission).where(Submission.id == sub.id).options(_load_options())
     ).one()
-    return _to_response(sub)
+    return _to_response(sub, latest_ingest_at(db))
 
 
 @router.get("/submissions/{id}", response_model=SubmissionResponse)
@@ -105,7 +112,7 @@ def get_submission(id: str, db: Session = Depends(get_db)):
     ).first()
     if not sub:
         raise HTTPException(status_code=404, detail="Submission not found")
-    return _to_response(sub)
+    return _to_response(sub, latest_ingest_at(db))
 
 
 @router.patch("/submissions/{id}", response_model=SubmissionResponse)
@@ -121,7 +128,7 @@ def update_submission(id: str, body: SubmissionUpdate, db: Session = Depends(get
     sub = db.scalars(
         select(Submission).where(Submission.id == id).options(_load_options())
     ).one()
-    return _to_response(sub)
+    return _to_response(sub, latest_ingest_at(db))
 
 
 @router.delete("/submissions/{id}", status_code=204)

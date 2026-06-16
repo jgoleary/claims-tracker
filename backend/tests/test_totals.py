@@ -37,7 +37,7 @@ def test_totals_csv_rollup_unmatched_defaults_in_network(client, db):
     # Unmatched claim defaults to in_network bucket
     claim = AnthemClaim(
         claim_number="CLM-001", claim_type="Medical",
-        patient_name="James OLeary", service_date=date(2025, 6, 1),
+        patient_name="James OLeary", service_date=date.today(),
         status="Approved", provider_name="Dr. Smith",
         billed=100_000, plan_discount=0, allowed=100_000,
         plan_paid=80_000, additional_savings=0,
@@ -50,4 +50,5 @@ def test_totals_csv_rollup_unmatched_defaults_in_network(client, db):
     data = resp.json()
     assert data["in_network"]["csv_rollup"]["deductible_sum"] == 10_000
     assert data["in_network"]["csv_rollup"]["total_sum"] == 20_000
-    assert data["out_of_network"]["csv_rollup"]["total_sum"] == 0
+    # In-network spending also counts toward the OON accumulator (see _get_csv_rollup).
+    assert data["out_of_network"]["csv_rollup"]["total_sum"] == 20_000

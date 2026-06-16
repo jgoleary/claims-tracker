@@ -9,6 +9,7 @@ export default function AnthemClaims() {
   const { year } = useYear()
   const [filterMatched, setFilterMatched] = useState('all')
   const [filterStatus, setFilterStatus] = useState('')
+  const [filterPatient, setFilterPatient] = useState('')
   const params: Record<string, string> = { year: String(year) }
   if (filterMatched !== 'all') params.matched = filterMatched
   if (filterStatus) params.status = filterStatus
@@ -18,7 +19,13 @@ export default function AnthemClaims() {
     queryFn: () => api.anthemClaims.list(params),
   })
 
-  const claims = data ?? []
+  const patients = [...new Set((data ?? []).map((c) => c.patient_name).filter(Boolean))].sort(
+    (a, b) => a.localeCompare(b)
+  )
+
+  const claims = [...(data ?? [])]
+    .filter((c) => !filterPatient || c.patient_name === filterPatient)
+    .sort((a, b) => (b.service_date ?? '').localeCompare(a.service_date ?? ''))
   const totalDeductible = claims.reduce((s, c) => s + c.deductible, 0)
   const totalCoinsurance = claims.reduce((s, c) => s + c.coinsurance, 0)
   const totalYourCost = claims.reduce((s, c) => s + c.your_cost, 0)
@@ -39,6 +46,13 @@ export default function AnthemClaims() {
           <option value="Pending">Pending</option>
           <option value="Approved">Approved</option>
           <option value="Denied">Denied</option>
+        </select>
+        <select value={filterPatient} onChange={(e) => setFilterPatient(e.target.value)}
+          className="border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="">All Patients</option>
+          {patients.map((p) => (
+            <option key={p} value={p}>{p}</option>
+          ))}
         </select>
       </div>
       {isLoading ? <div className="text-gray-500">Loading…</div> : (
