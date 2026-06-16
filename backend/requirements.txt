@@ -5,3 +5,4 @@ pydantic>=2.0.0
 python-multipart>=0.0.9
 playwright>=1.44.0
 requests>=2.31.0
+keyring>=24.0.0
