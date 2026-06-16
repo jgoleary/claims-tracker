@@ -62,7 +62,7 @@ When the user confirms a match suggestion (`match_type="confirmed"`), `routes/ma
 - React 19 + TypeScript + Vite; Tailwind for styling.
 - `api.ts` — single typed API client; all calls go through the `req<T>()` helper which throws on non-2xx.
 - `types.ts` — TypeScript interfaces mirroring the Pydantic schemas.
-- TanStack Query for all server state; the `/api` prefix is proxied to `:8000` by Vite.
+- TanStack Query for all server state; the `/api` prefix is proxied to `:8000` by Vite in dev. In the deployed build, FastAPI serves the built SPA itself (see Deployment) so there is no proxy — one origin on `:8000`.
 - `context/YearContext.tsx` — global plan year state; wrap pages with `useYear()` to read/set.
 - Pages: Dashboard, Submissions, SubmissionDetail, Matches, AnthemClaims, AnthemClaimDetail, Totals, Refresh, Settings.
 - Dashboard has clickable per-flag count cards (Missing, Vanished, Denied, Stale Pending, Underpaid) that filter the alert list. The backend returns one alert per flag, but the page groups them by submission so each submission is a single row carrying all its flag badges; rows and badges stay severity-ordered (red → yellow → info).
@@ -72,18 +72,33 @@ When the user confirms a match suggestion (`match_type="confirmed"`), `routes/ma
 ### Automation (`automation/`)
 Playwright scripts that log into Anthem and pull data. Dependencies are in the **backend venv** (`playwright` and `requests` are in `backend/requirements.txt`) — no separate venv needed.
 
-- **`auth.py`** — `get_credentials()` reads `ANTHEM_USERNAME`/`ANTHEM_PASSWORD` env vars first, then falls back to interactive prompts. `login(page, user, pass)` handles Anthem's Okta SSO (two-step: identifier → Next → password → submit → MFA wait). Browser opens non-headless for MFA. Session cookies persist in `data/browser-profile/` so MFA is only required once.
+- **`auth.py`** — `get_credentials()` reads `ANTHEM_USERNAME`/`ANTHEM_PASSWORD` env vars first, then falls back to interactive prompts. `login(page, user, pass)` handles Anthem's Okta SSO (two-step: identifier → Next → password → submit → MFA wait). Browser opens non-headless for MFA. Session cookies persist in `data/browser-profile/` so MFA is only required once (until the Okta session expires).
 - **`fetch_claims.py`** — navigates to the claims summary page, clicks Export, saves `data/exports/claims-YYYY-MM-DD-HHMM.csv`, POSTs to `/api/ingest/claims-csv`.
 - **`fetch_benefits.py`** — navigates to the benefits page, reads `#ant-tab-body-1-0` (in-network) and `#ant-tab-body-1-1` (OON) directly by tab body ID. Extracts amounts from `.progress-bar-amount .label-text` spans and limits from `span:has-text("Your limit is $")`. POSTs to `/api/ingest/benefits`.
 - **`fetch_all.py`** — single login, runs both scripts. Spawned by `POST /api/automation/run`.
 
 **Selector maintenance:** If Anthem changes their UI, update `_EXPORT_SELECTORS` in `fetch_claims.py` or the tab/amount selectors in `fetch_benefits.py`.
 
+### Credentials (macOS Keychain)
+- Anthem credentials live in the **macOS Keychain**, not in the UI. `backend/app/credentials.py` reads/writes two items under service `claims-tracker-anthem` via the `keyring` library; `get_credentials()` returns `(username, password)` or `None`.
+- Set/change them with the terminal-only script `deploy/store_credentials.py` (`backend/.venv/bin/python deploy/store_credentials.py`) — credentials never traverse the web layer.
+- `automation.py:run_automation()` resolves creds via `_resolve_credentials()` (passed-in args first, else Keychain) and injects them as `ANTHEM_USERNAME`/`ANTHEM_PASSWORD` env vars into the subprocess. The backend never logs or stores them.
+
 ### Refresh page / automation UX
-- Username and password are entered in the Refresh page UI each time — never persisted anywhere.
-- They're POSTed to `/api/automation/run` and passed as env vars (`ANTHEM_USERNAME`, `ANTHEM_PASSWORD`) to the subprocess. The backend never logs or stores them.
+- The Refresh page is a single **"Refresh Now"** button (no credential inputs) that POSTs an empty body to `/api/automation/run`; creds come from the Keychain.
+- On failure, `automation.py:notify()` fires a native macOS notification (`osascript`). `_classify_failure()` distinguishes an **MFA-needed** failure (auth-step timeout) from a generic failure.
 - After a run, stdout/stderr from the script is shown in the UI so failures are visible.
-- The app runs over plain HTTP on localhost, which is acceptable for local-only use. If ever exposed beyond localhost, add TLS.
+- The app runs over plain HTTP on localhost, which is acceptable for local-only use. The only plaintext-over-localhost surface is the CSV upload (no credentials). If ever exposed beyond localhost, add TLS.
 
 ### Data directory
-`data/` is gitignored and holds the SQLite DB (`data/claims.db`), PDF uploads (`data/pdfs/`), automation state (`data/state.json`), browser session (`data/browser-profile/`), and Playwright exports (`data/exports/`).
+`data/` is gitignored and holds the SQLite DB (`data/claims.db`), PDF uploads (`data/pdfs/`), automation state (`data/state.json`), browser session (`data/browser-profile/`), Playwright exports (`data/exports/`), and deployment logs (`data/logs/`).
+
+### Deployment (`deploy/`)
+Runs as an **always-on local macOS service**; not cloud. Full runbook in `deploy/README.md`.
+- **`backend/app/static_serve.py`** — `create_spa_router(dist)` serves the built `frontend/dist` (catch-all GET: existing file → file, otherwise `index.html`; `api/*` → 404). `main.py` includes it only when `frontend/dist` exists, so `npm run dev` and the test suite are unaffected.
+- **`install.sh`** builds the frontend and installs two `launchd` LaunchAgents (templates rendered with the absolute repo root replacing `@@ROOT@@`); `uninstall.sh` removes them.
+  - `com.claimstracker.server` — `uvicorn` on `127.0.0.1:8000` with `KeepAlive`; serves API + SPA. Logs → `data/logs/server.log`.
+  - `com.claimstracker.refresh` — `StartInterval 86400` (once/day) runs `refresh.sh` → `POST /api/automation/run`. Logs → `data/logs/refresh.log`.
+- **Scheduling model ("Option A"):** the laptop is often closed, so a daily run that's missed during sleep fires shortly after wake (launchd catch-up). No `pmset` scheduled wake.
+- **MFA constraint:** scheduled runs use the headful browser, so they can only open it while the Mac is **logged in** (locked/asleep display is fine; logged out is not). When the Okta session expires, the run fails, a macOS notification fires, and the user completes MFA once via the Refresh page.
+- **Trigger on demand:** `launchctl start com.claimstracker.refresh` (and `launchctl kickstart -k gui/$(id -u)/com.claimstracker.server` to restart the server).
