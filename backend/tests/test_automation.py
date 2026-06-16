@@ -35,3 +35,43 @@ def test_get_status_complete(client):
         resp = client.get("/api/automation/status")
     assert resp.json()["status"] == "complete"
     assert resp.json()["last_run_at"] is not None
+
+
+from unittest.mock import patch as _patch
+
+from app import automation as _auto
+
+
+def test_resolve_credentials_prefers_args():
+    assert _auto._resolve_credentials("u", "p") == ("u", "p")
+
+
+def test_resolve_credentials_falls_back_to_keychain():
+    with _patch("app.automation.credentials.get_credentials", return_value=("k", "kp")):
+        assert _auto._resolve_credentials("", "") == ("k", "kp")
+
+
+def test_resolve_credentials_none_when_unset():
+    with _patch("app.automation.credentials.get_credentials", return_value=None):
+        assert _auto._resolve_credentials("", "") is None
+
+
+def test_classify_failure_detects_mfa():
+    msg = _auto._classify_failure({"stdout": "[auth] ERROR: TimeoutError 120000ms", "stderr": ""})
+    assert "MFA" in msg
+
+
+def test_classify_failure_generic():
+    msg = _auto._classify_failure({"stdout": "[claims] ERROR: bad selector", "stderr": ""})
+    assert "MFA" not in msg
+    assert "failed" in msg.lower()
+
+
+def test_classify_failure_process_timeout_is_generic():
+    msg = _auto._classify_failure({"error": "timed out after 300s"})
+    assert "MFA" not in msg
+
+
+def test_notify_swallows_errors():
+    with _patch("app.automation.subprocess.run", side_effect=OSError("no osascript")):
+        _auto.notify("t", "m")  # must not raise

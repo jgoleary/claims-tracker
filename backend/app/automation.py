@@ -6,6 +6,8 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
+from app import credentials
+
 _STATE_FILE = Path(__file__).parent.parent.parent / "data" / "state.json"
 _SCRIPT = Path(__file__).parent.parent.parent / "automation" / "fetch_all.py"
 _lock = threading.Lock()
@@ -30,6 +32,31 @@ def get_status() -> dict:
         return _read()
 
 
+def notify(title: str, message: str) -> None:
+    """Best-effort macOS notification; no-op if osascript is unavailable."""
+    try:
+        subprocess.run(
+            ["osascript", "-e", f'display notification {message!r} with title {title!r}'],
+            check=False,
+            timeout=10,
+        )
+    except Exception:
+        pass
+
+
+def _resolve_credentials(username: str, password: str) -> tuple[str, str] | None:
+    if username and password:
+        return username, password
+    return credentials.get_credentials()
+
+
+def _classify_failure(summary: dict) -> str:
+    text = (summary.get("stdout", "") + summary.get("stderr", "")).lower()
+    if "auth" in text and "timeout" in text:
+        return "Anthem refresh needs MFA — open the Refresh page and run it manually."
+    return "Anthem refresh failed — check the Refresh page for details."
+
+
 def run_automation(username: str = "", password: str = "") -> bool:
     """Spawn fetch_all.py in a background thread. Returns False if already running."""
     with _lock:
@@ -39,11 +66,21 @@ def run_automation(username: str = "", password: str = "") -> bool:
         _write({"status": "running", "last_run_at": None, "summary": None})
 
     def _worker():
-        env = {**os.environ}
-        if username:
-            env["ANTHEM_USERNAME"] = username
-        if password:
-            env["ANTHEM_PASSWORD"] = password
+        creds = _resolve_credentials(username, password)
+        if creds is None:
+            with _lock:
+                _write({
+                    "status": "failed",
+                    "last_run_at": datetime.now(timezone.utc).isoformat(),
+                    "summary": {"error": "no stored credentials"},
+                })
+            notify(
+                "Claims Tracker",
+                "No stored Anthem credentials — run deploy/store_credentials.py.",
+            )
+            return
+
+        env = {**os.environ, "ANTHEM_USERNAME": creds[0], "ANTHEM_PASSWORD": creds[1]}
         try:
             result = subprocess.run(
                 [sys.executable, str(_SCRIPT)],
@@ -72,6 +109,9 @@ def run_automation(username: str = "", password: str = "") -> bool:
                 "last_run_at": datetime.now(timezone.utc).isoformat(),
                 "summary": summary,
             })
+
+        if status == "failed":
+            notify("Claims Tracker", _classify_failure(summary))
 
     threading.Thread(target=_worker, daemon=True).start()
     return True
