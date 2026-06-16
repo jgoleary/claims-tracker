@@ -80,11 +80,11 @@ export const api = {
   },
   automation: {
     status: () => req<AutomationStatus>('/automation/status'),
-    run: (username: string, password: string) =>
+    run: () =>
       req<{ detail: string }>('/automation/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({}),
       }),
   },
   providers: {
