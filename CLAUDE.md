@@ -65,6 +65,7 @@ When the user confirms a match suggestion (`match_type="confirmed"`), `routes/ma
 - TanStack Query for all server state; the `/api` prefix is proxied to `:8000` by Vite.
 - `context/YearContext.tsx` — global plan year state; wrap pages with `useYear()` to read/set.
 - Pages: Dashboard, Submissions, SubmissionDetail, Matches, AnthemClaims, AnthemClaimDetail, Totals, Refresh, Settings.
+- Dashboard has clickable per-flag count cards (Missing, Vanished, Denied, Stale Pending, Underpaid) that filter the alert list. The backend returns one alert per flag, but the page groups them by submission so each submission is a single row carrying all its flag badges; rows and badges stay severity-ordered (red → yellow → info).
 - Submissions table exposes Match Status, Anthem Status, and Plan Paid from the linked anthem claim. Edit modal reuses `SubmissionModal` with pre-populated fields (amounts converted from cents to dollars).
 - AnthemClaims table has Deductible and Coinsurance columns with a totals footer. Patient name links to a detail page showing all financials and the claim number.
 
