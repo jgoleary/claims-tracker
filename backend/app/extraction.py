@@ -5,6 +5,7 @@ from typing import Optional
 
 import anthropic
 
+from app import credentials
 from app.ingest import _parse_date, _parse_money
 from app.schemas import ExtractionResult
 
@@ -44,11 +45,12 @@ def extract_submission_fields(pdf_bytes: bytes) -> ExtractionResult:
     configured=True with an error string when the call or parse fails. Never
     raises — callers fall back to manual entry.
     """
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    key = credentials.get_anthropic_key() or os.environ.get("ANTHROPIC_API_KEY")
+    if not key:
         return ExtractionResult(configured=False)
 
     try:
-        client = anthropic.Anthropic()
+        client = anthropic.Anthropic(api_key=key)
         b64 = base64.standard_b64encode(pdf_bytes).decode("utf-8")
         message = client.messages.create(
             model=_MODEL,
