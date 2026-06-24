@@ -24,7 +24,7 @@ def test_dashboard_empty(client):
     resp = client.get("/api/dashboard")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["counts"] == {"missing": 0, "stale_pending": 0, "denied": 0, "underpaid": 0, "overpaid": 0, "vanished": 0}
+    assert data["counts"] == {"missing": 0, "stale_pending": 0, "denied": 0, "underpaid": 0, "overpaid": 0, "unsubmitted": 0, "vanished": 0}
     assert data["alerts"] == []
 
 
@@ -53,3 +53,12 @@ def test_dashboard_denied_flag(client, db):
     data = resp.json()
     assert data["counts"]["denied"] == 1
     assert any(a["flag"] == "DENIED" and a["severity"] == "red" for a in data["alerts"])
+
+
+def test_dashboard_unsubmitted_count(client, make_submission):
+    make_submission(submitted_date=None, service_date=date(2026, 5, 6))
+    resp = client.get("/api/dashboard?year=2026")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["counts"]["unsubmitted"] == 1
+    assert any(a["flag"] == "UNSUBMITTED" for a in data["alerts"])

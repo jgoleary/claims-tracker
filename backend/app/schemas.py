@@ -124,6 +124,7 @@ class DashboardCounts(BaseModel):
     denied: int = 0
     underpaid: int = 0
     overpaid: int = 0
+    unsubmitted: int = 0
     vanished: int = 0
 
 

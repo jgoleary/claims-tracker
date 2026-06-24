@@ -51,6 +51,8 @@ def get_dashboard(year: Optional[int] = None, db: Session = Depends(get_db)):
                 counts.overpaid += 1
             elif flag.flag == "VANISHED":
                 counts.vanished += 1
+            elif flag.flag == "UNSUBMITTED":
+                counts.unsubmitted += 1
 
     # Sort: red first, then yellow, then info
     severity_order = {"red": 0, "yellow": 1, "info": 2}
