@@ -56,6 +56,15 @@ class SubmissionResponse(BaseModel):
     flags: list[AlertOut] = []
 
 
+class ExtractionResult(BaseModel):
+    configured: bool
+    error: Optional[str] = None
+    member_name: Optional[str] = None
+    provider_name: Optional[str] = None
+    first_service_date: Optional[date] = None
+    amount_billed_cents: Optional[int] = None
+
+
 # ── Anthem Claims ────────────────────────────────────────────────────────────
 
 class AnthemClaimResponse(BaseModel):
