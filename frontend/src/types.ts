@@ -12,7 +12,7 @@ export interface SubmissionResponse {
   amount_billed: number
   expected_reimbursement: number
   network_treatment: 'in_network_exception' | 'out_of_network'
-  submitted_date: string
+  submitted_date: string | null
   submission_method: 'portal' | 'email'
   pdf_path: string | null
   notes: string | null
@@ -31,7 +31,7 @@ export interface SubmissionCreate {
   amount_billed: number
   expected_reimbursement: number
   network_treatment: 'in_network_exception' | 'out_of_network'
-  submitted_date: string
+  submitted_date?: string
   submission_method: 'portal' | 'email'
   notes?: string
 }
@@ -77,6 +77,7 @@ export interface DashboardCounts {
   stale_pending: number
   denied: number
   underpaid: number
+  overpaid: number
   vanished: number
 }
 
@@ -90,6 +91,11 @@ export interface DashboardAlert {
 export interface DashboardResponse {
   counts: DashboardCounts
   alerts: DashboardAlert[]
+}
+
+export interface PlanConfig {
+  in_network_coinsurance_pct: number
+  out_of_network_coinsurance_pct: number
 }
 
 export interface BenefitsSnapshotOut {

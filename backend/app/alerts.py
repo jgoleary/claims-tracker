@@ -29,12 +29,13 @@ def compute_flags(submission, match=None, latest_ingest_at: Optional[datetime] =
     today = date.today()
 
     if match is None:
-        days = (today - submission.submitted_date).days
-        if days > config.MISSING_DAYS:
-            alerts.append(Alert("MISSING", "red", {
-                "submitted_date": str(submission.submitted_date),
-                "days_waiting": days,
-            }))
+        if submission.submitted_date is not None:
+            days = (today - submission.submitted_date).days
+            if days > config.MISSING_DAYS:
+                alerts.append(Alert("MISSING", "red", {
+                    "submitted_date": str(submission.submitted_date),
+                    "days_waiting": days,
+                }))
         return alerts
 
     claim = match.anthem_claim
@@ -58,13 +59,21 @@ def compute_flags(submission, match=None, latest_ingest_at: Optional[datetime] =
 
     if claim.status == "Approved":
         expected = submission.expected_reimbursement
-        diff = abs(expected - claim.plan_paid)
+        underpaid_by = expected - claim.plan_paid
         threshold = max(config.UNDERPAID_MIN_CENTS, int(expected * config.UNDERPAID_PCT))
-        if diff > threshold:
+        if underpaid_by > threshold:
             alerts.append(Alert("UNDERPAID", "yellow", {
                 "expected_cents": expected,
                 "plan_paid_cents": claim.plan_paid,
-                "diff_cents": diff,
+                "diff_cents": underpaid_by,
+            }))
+
+        overpaid_by = claim.plan_paid - expected
+        if overpaid_by > threshold:
+            alerts.append(Alert("OVERPAID", "info", {
+                "expected_cents": expected,
+                "plan_paid_cents": claim.plan_paid,
+                "diff_cents": overpaid_by,
             }))
 
         if claim.plan_paid == 0 and claim.your_cost > 0 and submission.expected_reimbursement > 0:

@@ -26,7 +26,7 @@ class Submission(Base):
         SAEnum("in_network_exception", "out_of_network", name="network_treatment"),
         nullable=False,
     )
-    submitted_date: Mapped[date] = mapped_column(Date, nullable=False)
+    submitted_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     submission_method: Mapped[str] = mapped_column(
         SAEnum("portal", "email", name="submission_method"),
         nullable=False,
@@ -98,6 +98,14 @@ class ProviderAlias(Base):
     confirmed_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
     __table_args__ = (UniqueConstraint("canonical_name", "anthem_name"),)
+
+
+class PlanConfig(Base):
+    __tablename__ = "plan_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    in_network_coinsurance_pct: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    out_of_network_coinsurance_pct: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
 
 
 class BenefitsSnapshot(Base):

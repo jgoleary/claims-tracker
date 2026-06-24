@@ -91,3 +91,17 @@ def test_download_pdf_not_found(client: TestClient):
     created = client.post(BASE, json=SUBMISSION_BODY).json()
     resp = client.get(f"{BASE}/{created['id']}/pdf")
     assert resp.status_code == 404
+
+
+def test_create_submission_without_submitted_date(client):
+    resp = client.post("/api/submissions", json={
+        "member_name": "James OLeary",
+        "provider_name": "Joyful Behavior Therapy",
+        "service_date": "2026-05-06",
+        "amount_billed": 57000,
+        "expected_reimbursement": 25900,
+        "network_treatment": "out_of_network",
+        "submission_method": "portal",
+    })
+    assert resp.status_code == 201
+    assert resp.json()["submitted_date"] is None

@@ -13,7 +13,7 @@ class SubmissionCreate(BaseModel):
     amount_billed: int
     expected_reimbursement: int
     network_treatment: Literal["in_network_exception", "out_of_network"]
-    submitted_date: date
+    submitted_date: Optional[date] = None
     submission_method: Literal["portal", "email"]
     notes: Optional[str] = None
 
@@ -44,7 +44,7 @@ class SubmissionResponse(BaseModel):
     amount_billed: int
     expected_reimbursement: int
     network_treatment: str
-    submitted_date: date
+    submitted_date: Optional[date]
     submission_method: str
     pdf_path: Optional[str]
     notes: Optional[str]
@@ -123,6 +123,7 @@ class DashboardCounts(BaseModel):
     stale_pending: int = 0
     denied: int = 0
     underpaid: int = 0
+    overpaid: int = 0
     vanished: int = 0
 
 
@@ -164,6 +165,18 @@ class NetworkTotals(BaseModel):
 class TotalsResponse(BaseModel):
     in_network: NetworkTotals
     out_of_network: NetworkTotals
+
+
+# ── Plan Config ──────────────────────────────────────────────────────────────
+
+class PlanConfigResponse(BaseModel):
+    in_network_coinsurance_pct: int
+    out_of_network_coinsurance_pct: int
+
+
+class PlanConfigUpdate(BaseModel):
+    in_network_coinsurance_pct: int
+    out_of_network_coinsurance_pct: int
 
 
 # ── Automation ───────────────────────────────────────────────────────────────
