@@ -91,9 +91,28 @@ a value — leave expected blank and let the user enter it manually.
 - Response schema exposes `submitted_date: Optional[date]`.
 
 **`alerts.py`**
-- `compute_flags` MISSING branch: skip when `submission.submitted_date is None`
-  (an unsubmitted claim can't be "missing" from Anthem). When set, behaviour is
-  unchanged.
+- In the `match is None` branch, choose between two flags by `submitted_date`:
+  - `submitted_date is None` → **`UNSUBMITTED`** (severity `info`, fires immediately):
+    recorded locally but not yet pushed to Anthem.
+  - else `(today - submitted_date).days > MISSING_DAYS` → `MISSING` (unchanged): submitted
+    but not yet showing up in Anthem.
+- A matched claim is never `UNSUBMITTED` (matching implies it reached Anthem), so the flag
+  lives only in the unmatched branch.
+
+```python
+if match is None:
+    if submission.submitted_date is None:
+        alerts.append(Alert("UNSUBMITTED", "info", {}))
+    else:
+        days = (today - submission.submitted_date).days
+        if days > config.MISSING_DAYS:
+            alerts.append(Alert("MISSING", "red", {...}))
+    return alerts
+```
+
+**`schemas.py` / `routes/dashboard.py`**
+- Add `unsubmitted: int = 0` to `DashboardCounts`; increment it in the dashboard
+  count loop for `flag == "UNSUBMITTED"`. Severity sort already places `info` last.
 
 ### Frontend
 
@@ -101,7 +120,11 @@ a value — leave expected blank and let the user enter it manually.
 
 **`api.ts`** — `api.submissions.extract(file) -> ExtractionResult`.
 
-**`types.ts`** — `ExtractionResult` interface mirroring the backend.
+**`types.ts`** — `ExtractionResult` interface mirroring the backend; add `unsubmitted: number` to `DashboardCounts`.
+
+**`utils.ts` `FLAG_LABELS`** — add `UNSUBMITTED: 'Unsubmitted'`.
+
+**`Dashboard.tsx`** — add an "Unsubmitted" count card (blue/info styling) to the filterable per-flag cards.
 
 **`Submissions.tsx` `SubmissionModal`**
 - Add an "Extract from PDF" button beside the file input (step-1 only). Disabled
@@ -118,7 +141,8 @@ a value — leave expected blank and let the user enter it manually.
   closing. On entering step 2, `window.open(ANTHEM_URL, "_blank")`.
 - Step 2 panel: "Submission saved locally." + buttons:
   - "I've submitted to Anthem" → `PATCH /api/submissions/{id}` with `submitted_date = today` → close.
-  - "Do it later" → close (leaves `submitted_date` null).
+  - "Do it later" → close (leaves `submitted_date` null; the claim then surfaces the
+    `UNSUBMITTED` flag on the dashboard until confirmed).
 
 **`api.ts` plan config** — already added (`api.planConfig.get`).
 
@@ -162,10 +186,13 @@ traverses the web layer — it is read from the backend environment by the SDK.
   no env key → `configured:false`. No live API calls in tests.
 - **Backend endpoint**: `POST /api/submissions/extract` returns `{configured:false}`
   when the key is absent (the default in CI).
-- **Backend alerts**: MISSING is suppressed when `submitted_date is None`; still fires
-  when set and older than threshold.
-- **Backend regression**: existing suite green with nullable `submitted_date`
-  (update the dashboard-empty / submission-create fixtures as needed).
+- **Backend alerts**: `UNSUBMITTED` (info) fires when `submitted_date is None` and
+  unmatched; MISSING is suppressed in that case and still fires when `submitted_date` is
+  set and older than threshold; a matched claim with null `submitted_date` is not
+  `UNSUBMITTED`.
+- **Backend dashboard**: `unsubmitted` count is included and increments for the flag.
+- **Backend regression**: existing suite green with nullable `submitted_date` and the new
+  `unsubmitted` count key (update the dashboard-empty / submission-create fixtures as needed).
 - **Frontend `computeExpected`**: deductible-only, coinsurance, and OOP-cap cases.
 
 ## Out of scope (YAGNI)
