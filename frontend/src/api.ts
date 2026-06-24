@@ -1,6 +1,6 @@
 import type {
   AnthemClaimResponse, AutomationStatus, DashboardResponse,
-  IngestSummary, MatchSuggestion, ProviderAliasResponse,
+  IngestSummary, MatchSuggestion, PlanConfig, ProviderAliasResponse,
   SubmissionCreate, SubmissionResponse, TotalsResponse,
 } from './types'
 
@@ -90,5 +90,14 @@ export const api = {
   providers: {
     aliases: () => req<ProviderAliasResponse[]>('/providers/aliases'),
     deleteAlias: (id: number) => req<void>(`/providers/aliases/${id}`, { method: 'DELETE' }),
+  },
+  planConfig: {
+    get: () => req<PlanConfig>('/settings/plan-config'),
+    update: (body: PlanConfig) =>
+      req<PlanConfig>('/settings/plan-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }),
   },
 }

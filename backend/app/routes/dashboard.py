@@ -47,6 +47,8 @@ def get_dashboard(year: Optional[int] = None, db: Session = Depends(get_db)):
                 counts.denied += 1
             elif flag.flag == "UNDERPAID":
                 counts.underpaid += 1
+            elif flag.flag == "OVERPAID":
+                counts.overpaid += 1
             elif flag.flag == "VANISHED":
                 counts.vanished += 1
 

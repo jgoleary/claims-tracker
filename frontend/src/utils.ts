@@ -19,6 +19,7 @@ export const FLAG_LABELS: Record<string, string> = {
   STALE_PENDING: 'Stale Pending',
   DENIED: 'Denied',
   UNDERPAID: 'Underpaid',
+  OVERPAID: 'Overpaid',
   APPROVED_ZERO_PAID: 'Zero Paid',
   VANISHED: 'Vanished',
 }

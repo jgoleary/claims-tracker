@@ -63,6 +63,24 @@ class TestComputeFlags:
         flags = compute_flags(sub, match=match)
         assert any(f.flag == "UNDERPAID" for f in flags)
 
+    def test_not_underpaid_when_overpaid(self):
+        sub = _make_submission(expected_reimbursement=51_300)
+        match = _make_match(status="Approved", plan_paid_val=68_400)  # plan paid > expected
+        flags = compute_flags(sub, match=match)
+        assert not any(f.flag == "UNDERPAID" for f in flags)
+
+    def test_overpaid_flag(self):
+        sub = _make_submission(expected_reimbursement=51_300)
+        match = _make_match(status="Approved", plan_paid_val=68_400)  # $171 overpaid > $25 threshold
+        flags = compute_flags(sub, match=match)
+        assert any(f.flag == "OVERPAID" and f.severity == "info" for f in flags)
+
+    def test_not_overpaid_small_diff(self):
+        sub = _make_submission(expected_reimbursement=180_000)
+        match = _make_match(status="Approved", plan_paid_val=181_000)  # $10 diff < $25 threshold
+        flags = compute_flags(sub, match=match)
+        assert not any(f.flag == "OVERPAID" for f in flags)
+
     def test_not_underpaid_small_diff(self):
         sub = _make_submission(expected_reimbursement=180_000)
         match = _make_match(status="Approved", plan_paid_val=179_000)  # $10 diff < $25 threshold

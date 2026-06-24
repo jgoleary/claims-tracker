@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
 
@@ -7,6 +8,24 @@ export default function Settings() {
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.providers.deleteAlias(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['aliases'] }),
+  })
+
+  const { data: planConfig } = useQuery({ queryKey: ['planConfig'], queryFn: api.planConfig.get })
+  const [inPct, setInPct] = useState(10)
+  const [oonPct, setOonPct] = useState(30)
+  const [configDirty, setConfigDirty] = useState(false)
+
+  useEffect(() => {
+    if (planConfig) {
+      setInPct(planConfig.in_network_coinsurance_pct)
+      setOonPct(planConfig.out_of_network_coinsurance_pct)
+      setConfigDirty(false)
+    }
+  }, [planConfig])
+
+  const configMutation = useMutation({
+    mutationFn: () => api.planConfig.update({ in_network_coinsurance_pct: inPct, out_of_network_coinsurance_pct: oonPct }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['planConfig'] }); setConfigDirty(false) },
   })
 
   return (
@@ -39,6 +58,37 @@ export default function Settings() {
             </tbody>
           </table>
         )}
+      </div>
+      <div className="bg-white border rounded-lg p-6 shadow-sm mb-6">
+        <h2 className="font-semibold text-gray-900 mb-1">Plan Configuration</h2>
+        <p className="text-sm text-gray-500 mb-4">Coinsurance percentages for your plan.</p>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-gray-700">In-Network Coinsurance</label>
+            <div className="flex items-center gap-1">
+              <input type="number" min={0} max={100} value={inPct}
+                onChange={e => { setInPct(Number(e.target.value)); setConfigDirty(true) }}
+                className="w-16 border rounded px-2 py-1 text-sm text-right" />
+              <span className="text-sm text-gray-500">%</span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-gray-700">Out-of-Network Coinsurance</label>
+            <div className="flex items-center gap-1">
+              <input type="number" min={0} max={100} value={oonPct}
+                onChange={e => { setOonPct(Number(e.target.value)); setConfigDirty(true) }}
+                className="w-16 border rounded px-2 py-1 text-sm text-right" />
+              <span className="text-sm text-gray-500">%</span>
+            </div>
+          </div>
+          {configDirty && (
+            <button onClick={() => configMutation.mutate()}
+              disabled={configMutation.isPending}
+              className="mt-2 px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50">
+              {configMutation.isPending ? 'Saving...' : 'Save'}
+            </button>
+          )}
+        </div>
       </div>
       <div className="bg-white border rounded-lg p-6 shadow-sm">
         <h2 className="font-semibold text-gray-900 mb-1">Alert Thresholds</h2>
