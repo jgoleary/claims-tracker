@@ -8,6 +8,8 @@ import AlertBadge from '../components/Alert'
 import { computeExpected, formatCents, formatDate } from '../utils'
 import { useYear } from '../context/YearContext'
 
+const ANTHEM_URL = 'https://membersecure.anthem.com/member/claims/submission-questionnaire'
+
 function RemainingBar({ benefits, label }: { benefits: BenefitsSnapshotOut | null; label: string }) {
   if (!benefits) return null
   const dedRemaining = benefits.deductible_limit - benefits.deductible_spent
@@ -33,6 +35,8 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
 
   const { data: totals } = useQuery({ queryKey: ['totals', year], queryFn: () => api.totals.get(year) })
   const { data: planConfig } = useQuery({ queryKey: ['planConfig'], queryFn: api.planConfig.get })
+  const [step, setStep] = useState<1 | 2>(1)
+  const [createdId, setCreatedId] = useState<string | null>(null)
   const [extracting, setExtracting] = useState(false)
   const [extractNote, setExtractNote] = useState<string | null>(null)
   const [expectedDirty, setExpectedDirty] = useState(false)
@@ -88,16 +92,49 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
         return sub
       }
     },
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ['submissions'] })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      if (isEdit) { onClose(); return }
+      setCreatedId(result.id)
+      window.open(ANTHEM_URL, '_blank')
+      setStep(2)
+    },
+    onError: (e: Error) => setError(e.message),
+  })
+
+  const confirmMutation = useMutation({
+    mutationFn: () => api.submissions.update(createdId!, { submitted_date: new Date().toISOString().slice(0, 10) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['submissions'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
       onClose()
     },
-    onError: (e: Error) => setError(e.message),
   })
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm((prev) => ({ ...prev, [k]: e.target.value }))
+
+  if (step === 2) {
+    return (
+      <Modal title="Submit to Anthem" onClose={onClose}>
+        <div className="space-y-4">
+          <div className="text-sm text-green-700">{'✓'} Submission saved locally.</div>
+          <p className="text-sm text-gray-600">
+            Anthem's claim questionnaire was opened in a new tab. Once you've submitted the
+            claim there, confirm it below.
+          </p>
+          <div className="flex justify-end gap-3 pt-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Do it later</button>
+            <button onClick={() => confirmMutation.mutate()} disabled={confirmMutation.isPending}
+              className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+              {confirmMutation.isPending ? 'Saving…' : "I've submitted to Anthem"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    )
+  }
 
   return (
     <Modal title={isEdit ? 'Edit Submission' : 'Add Submission'} onClose={onClose}>
