@@ -13,8 +13,11 @@ Anthem refresh.
 2. Build + install the LaunchAgents:
    `bash deploy/install.sh`
 3. (Optional) Set up Anthropic API key for PDF auto-fill:
-   To enable PDF auto-fill, add your `ANTHROPIC_API_KEY` to the server process environment.
-   Edit `~/.config/LaunchAgents/com.claimstracker.server.plist` and add the following dict under the root `<dict>`:
+   To enable PDF auto-fill, store your Anthropic API key in the Keychain (preferred — survives reinstalls):
+   ```bash
+   backend/.venv/bin/python deploy/store_credentials.py --anthropic
+   ```
+   Alternatively, you can add the key directly to the server plist. Edit `~/.config/LaunchAgents/com.claimstracker.server.plist` and add the following dict under the root `<dict>`:
    ```xml
    <key>EnvironmentVariables</key>
    <dict>
@@ -26,7 +29,7 @@ Anthem refresh.
    ```bash
    launchctl kickstart -k gui/$(id -u)/com.claimstracker.server
    ```
-   Without the API key, PDF auto-fill is simply unavailable and submissions are entered manually.
+   Without the API key set either way, PDF auto-fill is unavailable and submissions are entered manually.
 4. Open the dashboard at http://localhost:8000
 
 ## How it runs
