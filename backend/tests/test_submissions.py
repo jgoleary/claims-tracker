@@ -108,6 +108,9 @@ def test_create_submission_without_submitted_date(client):
 
 
 def test_extract_returns_not_configured_without_key(client, monkeypatch):
+    # The key resolves Keychain -> env var, so neutralize both. Without the
+    # Keychain stub this test fails on any machine that has a real key stored.
+    monkeypatch.setattr("app.extraction.credentials.get_anthropic_key", lambda: None)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     resp = client.post(
         "/api/submissions/extract",
