@@ -17,3 +17,16 @@ def get_credentials() -> tuple[str, str] | None:
     if not username or not password:
         return None
     return username, password
+
+
+ANTHROPIC_SERVICE = "claims-tracker-anthropic"
+_ANTHROPIC_KEY = "api_key"
+
+
+def store_anthropic_key(key: str) -> None:
+    keyring.set_password(ANTHROPIC_SERVICE, _ANTHROPIC_KEY, key)
+
+
+def get_anthropic_key() -> str | None:
+    key = keyring.get_password(ANTHROPIC_SERVICE, _ANTHROPIC_KEY)
+    return key or None

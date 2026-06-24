@@ -28,3 +28,21 @@ def test_get_returns_none_when_password_missing(monkeypatch):
     monkeypatch.setattr(creds, "keyring", fake)
     fake.set_password(creds.SERVICE, "username", "me@example.com")
     assert creds.get_credentials() is None
+
+
+def test_anthropic_key_roundtrip(monkeypatch):
+    monkeypatch.setattr(creds, "keyring", _FakeKeyring())
+    creds.store_anthropic_key("sk-ant-abc123")
+    assert creds.get_anthropic_key() == "sk-ant-abc123"
+
+
+def test_anthropic_key_none_when_unset(monkeypatch):
+    monkeypatch.setattr(creds, "keyring", _FakeKeyring())
+    assert creds.get_anthropic_key() is None
+
+
+def test_anthropic_key_none_when_empty(monkeypatch):
+    fake = _FakeKeyring()
+    monkeypatch.setattr(creds, "keyring", fake)
+    fake.set_password(creds.ANTHROPIC_SERVICE, "api_key", "")
+    assert creds.get_anthropic_key() is None
