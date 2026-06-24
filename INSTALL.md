@@ -32,7 +32,7 @@ If `python3`, `node`, or `git` are missing, install them (e.g. from
 ## 1. Get the code
 
 ```bash
-git clone <repository-url> claims-tracker
+git clone https://github.com/jgoleary/claims-tracker claims-tracker
 cd claims-tracker
 ```
 
