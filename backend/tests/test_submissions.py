@@ -105,3 +105,13 @@ def test_create_submission_without_submitted_date(client):
     })
     assert resp.status_code == 201
     assert resp.json()["submitted_date"] is None
+
+
+def test_extract_returns_not_configured_without_key(client, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    resp = client.post(
+        "/api/submissions/extract",
+        files={"file": ("claim.pdf", b"%PDF-1.4 fake", "application/pdf")},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["configured"] is False

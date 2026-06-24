@@ -10,9 +10,10 @@ from sqlalchemy.orm import Session, selectinload
 from app.alerts import compute_flags
 from app.config import plan_year_dates
 from app.database import get_db
+from app.extraction import extract_submission_fields
 from app.matching import run_matching
 from app.models import AnthemClaim, Match, Submission
-from app.schemas import AlertOut, SubmissionCreate, SubmissionResponse, SubmissionUpdate
+from app.schemas import AlertOut, ExtractionResult, SubmissionCreate, SubmissionResponse, SubmissionUpdate
 from app.storage import get_storage
 
 router = APIRouter()
@@ -140,6 +141,12 @@ def delete_submission(id: str, db: Session = Depends(get_db)):
         db.delete(sub.match)
     db.delete(sub)
     db.commit()
+
+
+@router.post("/submissions/extract", response_model=ExtractionResult)
+async def extract_submission(file: UploadFile):
+    data = await file.read()
+    return extract_submission_fields(data)
 
 
 @router.post("/submissions/{id}/pdf", status_code=204)
