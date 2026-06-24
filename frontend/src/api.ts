@@ -1,7 +1,7 @@
 import type {
   AnthemClaimResponse, AutomationStatus, DashboardResponse,
-  IngestSummary, MatchSuggestion, PlanConfig, ProviderAliasResponse,
-  SubmissionCreate, SubmissionResponse, TotalsResponse,
+  ExtractionResult, IngestSummary, MatchSuggestion, PlanConfig,
+  ProviderAliasResponse, SubmissionCreate, SubmissionResponse, TotalsResponse,
 } from './types'
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
@@ -40,6 +40,11 @@ export const api = {
       return req<void>(`/submissions/${id}/pdf`, { method: 'POST', body: fd })
     },
     pdfUrl: (id: string) => `/api/submissions/${id}/pdf`,
+    extract: (file: File) => {
+      const fd = new FormData()
+      fd.append('file', file)
+      return req<ExtractionResult>('/submissions/extract', { method: 'POST', body: fd })
+    },
   },
   anthemClaims: {
     list: (params?: Record<string, string>) => {

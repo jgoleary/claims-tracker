@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
-import type { BenefitsSnapshotOut, SubmissionCreate, SubmissionResponse } from '../types'
+import type { BenefitsSnapshotOut, ExtractionResult, SubmissionCreate, SubmissionResponse } from '../types'
 import Modal from '../components/Modal'
 import AlertBadge from '../components/Alert'
-import { formatCents, formatDate } from '../utils'
+import { computeExpected, formatCents, formatDate } from '../utils'
 import { useYear } from '../context/YearContext'
 
 function RemainingBar({ benefits, label }: { benefits: BenefitsSnapshotOut | null; label: string }) {
@@ -32,6 +32,10 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
   const isEdit = !!initial
 
   const { data: totals } = useQuery({ queryKey: ['totals', year], queryFn: () => api.totals.get(year) })
+  const { data: planConfig } = useQuery({ queryKey: ['planConfig'], queryFn: api.planConfig.get })
+  const [extracting, setExtracting] = useState(false)
+  const [extractNote, setExtractNote] = useState<string | null>(null)
+  const [expectedDirty, setExpectedDirty] = useState(false)
 
   const [form, setForm] = useState({
     member_name: initial?.member_name ?? '',
@@ -47,6 +51,20 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
+    if (isEdit || expectedDirty || !totals || !planConfig) return
+    const billed = Math.round((parseFloat(form.amount_billed) || 0) * 100)
+    if (!billed) return
+    const oon = form.network_treatment === 'out_of_network'
+    const benefits = oon ? totals.out_of_network.benefits : totals.in_network.benefits
+    if (!benefits) return
+    const dedRemaining = benefits.deductible_limit - benefits.deductible_spent
+    const oopRemaining = benefits.oop_limit - benefits.oop_spent
+    const pct = (oon ? planConfig.out_of_network_coinsurance_pct : planConfig.in_network_coinsurance_pct) / 100
+    const expected = computeExpected(billed, dedRemaining, oopRemaining, pct)
+    setForm((p) => ({ ...p, expected_reimbursement: (expected / 100).toFixed(2) }))
+  }, [form.amount_billed, form.network_treatment, totals, planConfig, isEdit, expectedDirty])
+
   const mutation = useMutation({
     mutationFn: async () => {
       const dollars = {
@@ -56,7 +74,15 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
       if (isEdit) {
         return api.submissions.update(initial!.id, { ...form, ...dollars })
       } else {
-        const body: SubmissionCreate = { ...form, ...dollars }
+        const body: SubmissionCreate = {
+          member_name: form.member_name,
+          provider_name: form.provider_name,
+          service_date: form.service_date,
+          network_treatment: form.network_treatment,
+          submission_method: form.submission_method,
+          notes: form.notes,
+          ...dollars,
+        }
         const sub = await api.submissions.create(body)
         if (pdfFile) await api.submissions.uploadPdf(sub.id, pdfFile)
         return sub
@@ -90,17 +116,18 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
           </div>
         ))}
         <div className="grid grid-cols-2 gap-3">
-          {(['service_date', 'submitted_date'] as const).map((key) => (
-            <div key={key}>
-              <label className="block text-sm font-medium text-gray-700 mb-1 capitalize">{key.replace(/_/g, ' ')}</label>
-              <input
-                type="date"
-                value={form[key]}
-                onChange={set(key)}
-                className="w-full border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Service Date</label>
+            <input type="date" value={form.service_date} onChange={set('service_date')}
+              className="w-full border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          {isEdit && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Submitted Date</label>
+              <input type="date" value={form.submitted_date} onChange={set('submitted_date')}
+                className="w-full border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
-          ))}
+          )}
         </div>
         <datalist id="member-options">
           {memberNames.map((n) => <option key={n} value={n} />)}
@@ -118,7 +145,7 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Expected ($)</label>
             <input type="number" step="0.01" value={form.expected_reimbursement}
-              onChange={(e) => setForm((p) => ({ ...p, expected_reimbursement: e.target.value }))}
+              onChange={(e) => { setExpectedDirty(true); setForm((p) => ({ ...p, expected_reimbursement: e.target.value })) }}
               className="w-full border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
         </div>
@@ -143,7 +170,37 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
         {!isEdit && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">PDF (optional)</label>
-            <input type="file" accept=".pdf" onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)} className="text-sm" />
+            <div className="flex items-center gap-3">
+              <input type="file" accept=".pdf" onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)} className="text-sm" />
+              <button
+                type="button"
+                disabled={!pdfFile || extracting}
+                onClick={async () => {
+                  if (!pdfFile) return
+                  setExtracting(true)
+                  setExtractNote(null)
+                  try {
+                    const r: ExtractionResult = await api.submissions.extract(pdfFile)
+                    if (!r.configured) { setExtractNote('PDF auto-fill unavailable (no API key configured).'); return }
+                    if (r.error) { setExtractNote("Couldn’t read the PDF — please enter fields manually."); return }
+                    setForm((p) => ({
+                      ...p,
+                      member_name: r.member_name ?? p.member_name,
+                      provider_name: r.provider_name ?? p.provider_name,
+                      service_date: r.first_service_date ?? p.service_date,
+                      amount_billed: r.amount_billed_cents != null ? String(r.amount_billed_cents / 100) : p.amount_billed,
+                    }))
+                  } catch {
+                    setExtractNote("Couldn’t read the PDF — please enter fields manually.")
+                  } finally {
+                    setExtracting(false)
+                  }
+                }}
+                className="px-3 py-1 text-sm border rounded text-blue-700 border-blue-300 hover:bg-blue-50 disabled:opacity-50">
+                {extracting ? 'Reading…' : 'Extract from PDF'}
+              </button>
+            </div>
+            {extractNote && <div className="text-xs text-amber-700 mt-1">{extractNote}</div>}
           </div>
         )}
         {totals && (

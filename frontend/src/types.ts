@@ -137,3 +137,12 @@ export interface ProviderAliasResponse {
   anthem_name: string
   confirmed_at: string
 }
+
+export interface ExtractionResult {
+  configured: boolean
+  error: string | null
+  member_name: string | null
+  provider_name: string | null
+  first_service_date: string | null
+  amount_billed_cents: number | null
+}
