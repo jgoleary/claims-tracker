@@ -7,7 +7,7 @@ REPO="jgoleary/claims-tracker"
 INSTALL_DIR="${CLAIMS_TRACKER_DIR:-$HOME/claims-tracker}"
 TARBALL_URL="https://github.com/$REPO/releases/latest/download/claims-tracker.tar.gz"
 
-echo "Downloading Claims Tracker into $INSTALL_DIR…"
+echo "Downloading Claims Tracker into $INSTALL_DIR..."
 mkdir -p "$INSTALL_DIR"
 curl -fsSL "$TARBALL_URL" | tar -xz -C "$INSTALL_DIR" --strip-components=1
 

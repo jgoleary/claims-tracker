@@ -11,7 +11,7 @@ VENV="$ROOT/backend/.venv"
 AGENTS="$HOME/Library/LaunchAgents"
 LABELS=(com.claimstracker.server com.claimstracker.refresh)
 
-echo "Claims Tracker installer — $ROOT"
+echo "Claims Tracker installer - $ROOT"
 
 # 1. Clear quarantine on anything that arrived via a browser-downloaded zip.
 xattr -dr com.apple.quarantine "$ROOT" 2>/dev/null || true
@@ -24,24 +24,24 @@ fi
 
 # 3. Ensure uv is installed (pinned version).
 if ! command -v uv >/dev/null 2>&1; then
-  echo "Installing uv $UV_VERSION…"
+  echo "Installing uv $UV_VERSION..."
   curl -LsSf "https://astral.sh/uv/$UV_VERSION/install.sh" | sh
 fi
 export PATH="$HOME/.local/bin:$PATH"
 command -v uv >/dev/null 2>&1 || { echo "ERROR: uv installation failed."; exit 1; }
 
 # 4. Provision a pinned Python and runtime dependencies.
-echo "Provisioning Python $PYTHON_VERSION and dependencies…"
+echo "Provisioning Python $PYTHON_VERSION and dependencies..."
 uv venv "$VENV" --python "$PYTHON_VERSION"
 uv pip install --python "$VENV/bin/python" -r "$ROOT/backend/requirements.txt"
 
 # 5. Download the automation browser.
-echo "Downloading the automation browser (Chromium)…"
+echo "Downloading the automation browser (Chromium)..."
 "$VENV/bin/playwright" install chromium
 
-# 6. Credentials → Keychain. Read from the terminal even under `curl | bash`.
+# 6. Credentials -> Keychain. Read from the terminal even under `curl | bash`.
 if (cd "$ROOT/backend" && "$VENV/bin/python" -c "import sys; from app import credentials; sys.exit(0 if credentials.get_credentials() else 1)"); then
-  echo "Anthem credentials already in the Keychain — leaving them as-is."
+  echo "Anthem credentials already in the Keychain - leaving them as-is."
 else
   echo "Enter your Anthem credentials (stored only in the macOS Keychain):"
   "$VENV/bin/python" "$ROOT/deploy/store_credentials.py" < /dev/tty
@@ -52,7 +52,7 @@ case "$ans" in
   y|Y) "$VENV/bin/python" "$ROOT/deploy/store_credentials.py" --anthropic < /dev/tty ;;
 esac
 
-# 7. Install + load the launchd agents (no npm — dist is prebuilt).
+# 7. Install + load the launchd agents (no npm - dist is prebuilt).
 mkdir -p "$ROOT/data/logs" "$AGENTS"
 for label in "${LABELS[@]}"; do
   dest="$AGENTS/$label.plist"
@@ -73,7 +73,7 @@ open http://localhost:8000 || true
 
 cat <<EOF
 
-Done — Claims Tracker is running at http://localhost:8000
+Done - Claims Tracker is running at http://localhost:8000
 It starts automatically each time you log in.
 
 The first claims refresh opens a Chromium window so you can complete Anthem's MFA once.

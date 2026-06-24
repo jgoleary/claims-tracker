@@ -8,7 +8,7 @@ TAG="${1:?usage: make_release.sh vX.Y.Z [--dry-run]}"
 DRY=0; [ "${2:-}" = "--dry-run" ] && DRY=1
 
 cd "$ROOT"
-echo "Building frontend…"
+echo "Building frontend..."
 npm --prefix frontend ci
 npm --prefix frontend run build
 [ -f frontend/dist/index.html ] || { echo "ERROR: frontend/dist not built."; exit 1; }
@@ -40,7 +40,7 @@ if [ "$DRY" = "1" ]; then
   exit 0
 fi
 
-echo "Publishing release $TAG…"
+echo "Publishing release $TAG..."
 gh release create "$TAG" "$TARBALL" "$ROOT/deploy/bootstrap.sh" \
   --title "$TAG" --notes "Claims Tracker $TAG" \
 || gh release upload "$TAG" "$TARBALL" "$ROOT/deploy/bootstrap.sh" --clobber

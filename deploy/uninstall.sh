@@ -15,7 +15,7 @@ done
 
 cat <<EOF
 
-Background agents removed — the app no longer starts at login.
+Background agents removed - the app no longer starts at login.
 
 Left in place (delete manually for a clean slate):
   - Your data:        $ROOT/data        (SQLite database, uploaded PDFs)
