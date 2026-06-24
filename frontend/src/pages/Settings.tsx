@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
+import { useRedact } from '../context/RedactContext'
 
 export default function Settings() {
   const qc = useQueryClient()
+  const { redact, toggle } = useRedact()
   const { data: aliases, isLoading } = useQuery({ queryKey: ['aliases'], queryFn: api.providers.aliases })
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.providers.deleteAlias(id),
@@ -32,6 +34,19 @@ export default function Settings() {
   return (
     <div className="max-w-2xl">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Settings</h1>
+      <div className="bg-white border rounded-lg p-6 shadow-sm mb-6">
+        <h2 className="font-semibold text-gray-900 mb-1">Privacy</h2>
+        <p className="text-sm text-gray-500 mb-4">Hide patient names (shown as <code className="bg-gray-100 px-1 rounded">*** ***</code>) for screen sharing and demos. Provider names and amounts are unaffected, and your data is never changed.</p>
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={redact}
+            onChange={toggle}
+            className="rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
+          />
+          <span className="text-sm text-gray-700">Hide patient names</span>
+        </label>
+      </div>
       <div className="bg-white border rounded-lg p-6 shadow-sm mb-6">
         <h2 className="font-semibold text-gray-900 mb-1">Provider Aliases</h2>
         <p className="text-sm text-gray-500 mb-4">Learned from confirmed matches. Used for automatic matching.</p>

@@ -5,8 +5,10 @@ import { api } from '../api'
 import type { BenefitsSnapshotOut, ExtractionResult, SubmissionCreate, SubmissionResponse } from '../types'
 import Modal from '../components/Modal'
 import AlertBadge from '../components/Alert'
+import RedactedName from '../components/RedactedName'
 import { computeExpected, formatCents, formatDate } from '../utils'
 import { useYear } from '../context/YearContext'
+import { useRedact } from '../context/RedactContext'
 
 const ANTHEM_URL = 'https://membersecure.anthem.com/member/claims/submission-questionnaire'
 
@@ -31,6 +33,7 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
 }) {
   const qc = useQueryClient()
   const { year } = useYear()
+  const { redact } = useRedact()
   const isEdit = !!initial
 
   const { data: totals } = useQuery({ queryKey: ['totals', year], queryFn: () => api.totals.get(year) })
@@ -167,7 +170,7 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
           )}
         </div>
         <datalist id="member-options">
-          {memberNames.map((n) => <option key={n} value={n} />)}
+          {!redact && memberNames.map((n) => <option key={n} value={n} />)}
         </datalist>
         <datalist id="provider-options">
           {providerNames.map((n) => <option key={n} value={n} />)}
@@ -310,7 +313,7 @@ export default function Submissions() {
               {(data ?? []).map((sub) => (
                 <tr key={sub.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
-                    <Link to={`/submissions/${sub.id}`} className="font-medium text-blue-600 hover:underline">{sub.member_name}</Link>
+                    <Link to={`/submissions/${sub.id}`} className="font-medium text-blue-600 hover:underline"><RedactedName value={sub.member_name} /></Link>
                   </td>
                   <td className="px-4 py-3 text-gray-700">{sub.provider_name}</td>
                   <td className="px-4 py-3 text-gray-500">{formatDate(sub.service_date)}</td>

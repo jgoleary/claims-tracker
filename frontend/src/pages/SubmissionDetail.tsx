@@ -3,10 +3,12 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
 import AlertBadge from '../components/Alert'
-import { formatCents, formatDate } from '../utils'
+import { formatCents, formatDate, maskName } from '../utils'
+import { useRedact } from '../context/RedactContext'
 
 export default function SubmissionDetail() {
   const { id } = useParams<{ id: string }>()
+  const { redact } = useRedact()
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [editing, setEditing] = useState(false)
@@ -60,7 +62,7 @@ export default function SubmissionDetail() {
         <div className="bg-white border rounded-lg p-6 shadow-sm">
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">My Submission</h2>
           <dl className="space-y-3 text-sm">
-            {([['Member', sub.member_name], ['Provider', sub.provider_name], ['Service Date', formatDate(sub.service_date)], ['Submitted', formatDate(sub.submitted_date)], ['Method', sub.submission_method], ['Billed', formatCents(sub.amount_billed)], ['Expected', formatCents(sub.expected_reimbursement)], ['Network', sub.network_treatment === 'in_network_exception' ? 'In-Network Exception' : 'Out-of-Network']] as [string, string][]).map(([label, value]) => (
+            {([['Member', maskName(sub.member_name, redact)], ['Provider', sub.provider_name], ['Service Date', formatDate(sub.service_date)], ['Submitted', formatDate(sub.submitted_date)], ['Method', sub.submission_method], ['Billed', formatCents(sub.amount_billed)], ['Expected', formatCents(sub.expected_reimbursement)], ['Network', sub.network_treatment === 'in_network_exception' ? 'In-Network Exception' : 'Out-of-Network']] as [string, string][]).map(([label, value]) => (
               <div key={label} className="flex justify-between">
                 <dt className="text-gray-500">{label}</dt>
                 <dd className="font-medium text-gray-900">{value}</dd>

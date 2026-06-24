@@ -2,6 +2,14 @@ export function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`
 }
 
+/** Mask a personal name for demos. When `redact`, each whitespace-separated token
+ *  becomes `***` (e.g. "Nolan O'leary" → "*** ***"); otherwise the value is unchanged. */
+export function maskName(value: string | null | undefined, redact: boolean): string {
+  if (!value) return value ?? ''
+  if (!redact) return value
+  return value.trim().split(/\s+/).map(() => '***').join(' ')
+}
+
 export function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '—'
   const d = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr + 'T00:00:00')

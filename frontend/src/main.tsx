@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App'
 import { YearProvider } from './context/YearContext'
+import { RedactProvider } from './context/RedactContext'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -17,7 +18,9 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <YearProvider>
-          <App />
+          <RedactProvider>
+            <App />
+          </RedactProvider>
         </YearProvider>
       </BrowserRouter>
     </QueryClientProvider>

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
 import type { AnthemClaimResponse } from '../types'
+import RedactedName from '../components/RedactedName'
 import { formatCents, formatDate } from '../utils'
 
 function ClaimCard({ claim }: { claim: AnthemClaimResponse }) {
@@ -45,7 +46,7 @@ export default function Matches() {
                   <div className="text-xs font-semibold text-gray-400 uppercase mb-3">My Submission</div>
                   <div className="text-sm space-y-1">
                     <div className="font-medium text-gray-900">{s.submission.provider_name}</div>
-                    <div className="text-gray-500">{s.submission.member_name} · {formatDate(s.submission.service_date)}</div>
+                    <div className="text-gray-500"><RedactedName value={s.submission.member_name} /> · {formatDate(s.submission.service_date)}</div>
                     <div className="text-gray-600">Billed: {formatCents(s.submission.amount_billed)}</div>
                   </div>
                 </div>

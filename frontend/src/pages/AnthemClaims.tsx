@@ -2,11 +2,14 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api'
-import { formatCents, formatDate } from '../utils'
+import RedactedName from '../components/RedactedName'
+import { formatCents, formatDate, maskName } from '../utils'
 import { useYear } from '../context/YearContext'
+import { useRedact } from '../context/RedactContext'
 
 export default function AnthemClaims() {
   const { year } = useYear()
+  const { redact } = useRedact()
   const [filterMatched, setFilterMatched] = useState('all')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterPatient, setFilterPatient] = useState('')
@@ -51,7 +54,7 @@ export default function AnthemClaims() {
           className="border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
           <option value="">All Patients</option>
           {patients.map((p) => (
-            <option key={p} value={p}>{p}</option>
+            <option key={p} value={p}>{maskName(p, redact)}</option>
           ))}
         </select>
       </div>
@@ -69,7 +72,7 @@ export default function AnthemClaims() {
               {claims.map((c) => (
                 <tr key={c.claim_number} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
-                    <Link to={`/anthem-claims/${encodeURIComponent(c.claim_number)}`} className="font-medium text-blue-600 hover:underline">{c.patient_name}</Link>
+                    <Link to={`/anthem-claims/${encodeURIComponent(c.claim_number)}`} className="font-medium text-blue-600 hover:underline"><RedactedName value={c.patient_name} /></Link>
                   </td>
                   <td className="px-4 py-3 text-gray-700">{c.provider_name}</td>
                   <td className="px-4 py-3 text-gray-500">{formatDate(c.service_date)}</td>

@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api'
+import RedactedName from '../components/RedactedName'
 import { formatCents, formatDate } from '../utils'
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -47,7 +48,7 @@ export default function AnthemClaimDetail() {
         <div className="bg-white border rounded-lg p-4 shadow-sm">
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Claim Info</h2>
           <Row label="Claim Type" value={claim.claim_type} />
-          <Row label="Patient" value={claim.patient_name} />
+          <Row label="Patient" value={<RedactedName value={claim.patient_name} />} />
           <Row label="Service Date" value={formatDate(claim.service_date)} />
           <Row label="Received Date" value={formatDate(claim.received_date)} />
           <Row label="Processed Date" value={formatDate(claim.processed_date)} />
