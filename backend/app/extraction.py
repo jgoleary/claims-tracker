@@ -74,10 +74,15 @@ def extract_submission_fields(pdf_bytes: bytes) -> ExtractionResult:
     except ValueError:
         service_date = None
 
+    try:
+        amount_cents = _parse_money(billed_raw) if billed_raw else None
+    except (ValueError, AttributeError):
+        amount_cents = None
+
     return ExtractionResult(
         configured=True,
         member_name=_clean(data.get("member_name")),
         provider_name=_clean(data.get("provider_name")),
         first_service_date=service_date,
-        amount_billed_cents=_parse_money(billed_raw) if billed_raw else None,
+        amount_billed_cents=amount_cents,
     )

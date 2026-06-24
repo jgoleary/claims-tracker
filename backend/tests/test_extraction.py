@@ -53,6 +53,23 @@ def test_blank_fields_become_none(monkeypatch):
     assert result.first_service_date is None
 
 
+def test_malformed_values_degrade_to_none(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    client = _fake_client({
+        "member_name": "Nolan OLeary",
+        "provider_name": "Citrus Speech",
+        "first_service_date": "not-a-date",
+        "amount_billed": "free of charge",
+    })
+    monkeypatch.setattr(extraction.anthropic, "Anthropic", lambda *a, **k: client)
+    result = extraction.extract_submission_fields(b"%PDF-1.4 fake")
+    assert result.configured is True
+    assert result.error is None
+    assert result.first_service_date is None
+    assert result.amount_billed_cents is None
+    assert result.member_name == "Nolan OLeary"
+
+
 def test_api_error_is_captured(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     client = MagicMock()
