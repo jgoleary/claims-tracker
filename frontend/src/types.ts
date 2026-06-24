@@ -78,6 +78,7 @@ export interface DashboardCounts {
   denied: number
   underpaid: number
   overpaid: number
+  unsubmitted: number
   vanished: number
 }
 
