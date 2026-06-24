@@ -17,5 +17,8 @@ frontend/node_modules/
 # Superpowers visual companion
 .superpowers/
 
+# Release build output
+dist-release/
+
 # OS
 .DS_Store
