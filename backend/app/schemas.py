@@ -65,6 +65,10 @@ class ExtractionResult(BaseModel):
     amount_billed_cents: Optional[int] = None
 
 
+class AnthropicKeyStatus(BaseModel):
+    configured: bool
+
+
 # ── Anthem Claims ────────────────────────────────────────────────────────────
 
 class AnthemClaimResponse(BaseModel):

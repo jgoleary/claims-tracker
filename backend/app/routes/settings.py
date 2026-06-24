@@ -5,9 +5,10 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app import credentials
 from app.database import get_db
 from app.models import PlanConfig
-from app.schemas import PlanConfigResponse, PlanConfigUpdate
+from app.schemas import AnthropicKeyStatus, PlanConfigResponse, PlanConfigUpdate
 
 router = APIRouter()
 
@@ -34,6 +35,11 @@ def get_credentials():
 def save_credentials(body: CredentialsSave):
     _CREDENTIALS_FILE.parent.mkdir(parents=True, exist_ok=True)
     _CREDENTIALS_FILE.write_text(json.dumps({"username": body.username, "password": body.password}))
+
+
+@router.get("/settings/anthropic-key", response_model=AnthropicKeyStatus)
+def anthropic_key_status():
+    return AnthropicKeyStatus(configured=credentials.get_anthropic_key() is not None)
 
 
 def _get_or_create_plan_config(db: Session) -> PlanConfig:
