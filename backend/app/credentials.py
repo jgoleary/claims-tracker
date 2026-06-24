@@ -1,5 +1,6 @@
 """Read/write Anthem credentials in the macOS Keychain via `keyring`."""
 import keyring
+from keyring.errors import KeyringError
 
 SERVICE = "claims-tracker-anthem"
 _USERNAME_KEY = "username"
@@ -12,8 +13,13 @@ def store_credentials(username: str, password: str) -> None:
 
 
 def get_credentials() -> tuple[str, str] | None:
-    username = keyring.get_password(SERVICE, _USERNAME_KEY)
-    password = keyring.get_password(SERVICE, _PASSWORD_KEY)
+    # A locked or access-denied Keychain (e.g. the user clicked Deny) is treated
+    # the same as "no credentials stored" rather than crashing the caller.
+    try:
+        username = keyring.get_password(SERVICE, _USERNAME_KEY)
+        password = keyring.get_password(SERVICE, _PASSWORD_KEY)
+    except KeyringError:
+        return None
     if not username or not password:
         return None
     return username, password
@@ -28,5 +34,8 @@ def store_anthropic_key(key: str) -> None:
 
 
 def get_anthropic_key() -> str | None:
-    key = keyring.get_password(ANTHROPIC_SERVICE, _ANTHROPIC_KEY)
+    try:
+        key = keyring.get_password(ANTHROPIC_SERVICE, _ANTHROPIC_KEY)
+    except KeyringError:
+        return None
     return key or None
