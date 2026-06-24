@@ -46,6 +46,7 @@ npm run lint
 - **`storage.py`** — `Storage` ABC with `LocalFileStorage` impl. PDF files stored under `data/pdfs/`. The `pdf_path` column is a storage key, not a raw filesystem path. Swap to S3 by implementing `Storage` and calling `set_storage()`.
 - **`automation.py`** — runs `automation/fetch_all.py` as a subprocess (using `sys.executable` so it shares the backend venv) in a background thread, tracking status in `data/state.json`. Accepts `username`/`password` and passes them as env vars to the subprocess — credentials are never written to disk.
 - **`config.py`** — `plan_year_dates(year: int) -> (date, date)` returns Jan 1 / Dec 31 for any calendar year. All list/totals endpoints accept a `year` query param (defaults to current year).
+- **`extraction.py`** — sends an uploaded claim PDF to Claude (`claude-sonnet-4-6`, key from `ANTHROPIC_API_KEY`) to prefill member/provider/first-service-date/billed. Returns `configured=False` when no key is set so the UI falls back to manual entry. Expected reimbursement is computed client-side, not extracted.
 
 ### Plan year filtering
 Every data endpoint (`/submissions`, `/anthem-claims`, `/dashboard`, `/totals`) accepts `?year=YYYY` and filters by `service_date`. The frontend stores the selected year in `YearContext` and passes it to all queries. The sidebar dropdown sets it globally.
@@ -57,6 +58,9 @@ Every data endpoint (`/submissions`, `/anthem-claims`, `/dashboard`, `/totals`) 
 
 ### Provider alias learning
 When the user confirms a match suggestion (`match_type="confirmed"`), `routes/matches.py` automatically writes a `ProviderAlias` row mapping `normalize(submission.provider_name)` → `normalize(claim.provider_name)`. Future matching uses these aliases for auto-matching.
+
+### Submission filing status
+`submitted_date` is nullable and is set when the user confirms the claim was uploaded to Anthem (two-step Add Submission modal). The `UNSUBMITTED` info flag surfaces claims that have no `submitted_date`.
 
 ### Frontend (`frontend/src/`)
 - React 19 + TypeScript + Vite; Tailwind for styling.
