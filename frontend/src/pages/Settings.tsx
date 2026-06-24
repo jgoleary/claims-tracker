@@ -11,6 +11,7 @@ export default function Settings() {
   })
 
   const { data: planConfig } = useQuery({ queryKey: ['planConfig'], queryFn: api.planConfig.get })
+  const { data: anthropicKey } = useQuery({ queryKey: ['anthropicKey'], queryFn: api.settings.anthropicKeyStatus })
   const [inPct, setInPct] = useState(10)
   const [oonPct, setOonPct] = useState(30)
   const [configDirty, setConfigDirty] = useState(false)
@@ -89,6 +90,20 @@ export default function Settings() {
             </button>
           )}
         </div>
+      </div>
+      <div className="bg-white border rounded-lg p-6 shadow-sm mb-6">
+        <h2 className="font-semibold text-gray-900 mb-1">Anthropic API Key</h2>
+        <p className="text-sm text-gray-500 mb-3">Used for PDF auto-fill on new submissions.</p>
+        <div className="flex items-center gap-2 text-sm">
+          {anthropicKey?.configured ? (
+            <span className="text-green-700 font-medium">✓ Configured</span>
+          ) : (
+            <span className="text-gray-500 font-medium">● Not configured</span>
+          )}
+        </div>
+        <p className="text-xs text-gray-400 mt-2">
+          Set it in the terminal: <code className="bg-gray-100 px-1 rounded">backend/.venv/bin/python deploy/store_credentials.py --anthropic</code>
+        </p>
       </div>
       <div className="bg-white border rounded-lg p-6 shadow-sm">
         <h2 className="font-semibold text-gray-900 mb-1">Alert Thresholds</h2>

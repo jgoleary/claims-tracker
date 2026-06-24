@@ -1,5 +1,5 @@
 import type {
-  AnthemClaimResponse, AutomationStatus, DashboardResponse,
+  AnthemClaimResponse, AnthropicKeyStatus, AutomationStatus, DashboardResponse,
   ExtractionResult, IngestSummary, MatchSuggestion, PlanConfig,
   ProviderAliasResponse, SubmissionCreate, SubmissionResponse, TotalsResponse,
 } from './types'
@@ -104,5 +104,8 @@ export const api = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       }),
+  },
+  settings: {
+    anthropicKeyStatus: () => req<AnthropicKeyStatus>('/settings/anthropic-key'),
   },
 }

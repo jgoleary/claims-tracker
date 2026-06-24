@@ -146,3 +146,7 @@ export interface ExtractionResult {
   first_service_date: string | null
   amount_billed_cents: number | null
 }
+
+export interface AnthropicKeyStatus {
+  configured: boolean
+}
