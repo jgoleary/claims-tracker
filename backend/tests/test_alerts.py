@@ -123,3 +123,17 @@ class TestComputeFlags:
         match = _make_match(last_seen_at=datetime(2026, 5, 22, 6, 0, 0))
         flags = compute_flags(sub, match=match, latest_ingest_at=None)
         assert not any(f.flag == "VANISHED" for f in flags)
+
+    def test_unsubmitted_flag_when_no_submitted_date(self):
+        sub = _make_submission()
+        sub.submitted_date = None  # bypass the helper's `or default`
+        flags = compute_flags(sub, match=None)
+        assert len(flags) == 1
+        assert flags[0].flag == "UNSUBMITTED"
+        assert flags[0].severity == "info"
+
+    def test_no_missing_when_unsubmitted(self):
+        sub = _make_submission()
+        sub.submitted_date = None
+        flags = compute_flags(sub, match=None)
+        assert not any(f.flag == "MISSING" for f in flags)

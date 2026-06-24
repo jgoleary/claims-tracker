@@ -29,13 +29,15 @@ def compute_flags(submission, match=None, latest_ingest_at: Optional[datetime] =
     today = date.today()
 
     if match is None:
-        if submission.submitted_date is not None:
-            days = (today - submission.submitted_date).days
-            if days > config.MISSING_DAYS:
-                alerts.append(Alert("MISSING", "red", {
-                    "submitted_date": str(submission.submitted_date),
-                    "days_waiting": days,
-                }))
+        if submission.submitted_date is None:
+            alerts.append(Alert("UNSUBMITTED", "info", {}))
+            return alerts
+        days = (today - submission.submitted_date).days
+        if days > config.MISSING_DAYS:
+            alerts.append(Alert("MISSING", "red", {
+                "submitted_date": str(submission.submitted_date),
+                "days_waiting": days,
+            }))
         return alerts
 
     claim = match.anthem_claim
