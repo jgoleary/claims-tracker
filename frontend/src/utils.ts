@@ -14,6 +14,21 @@ export const SEVERITY_COLORS: Record<string, string> = {
   info: 'bg-blue-100 text-blue-800 border-blue-300',
 }
 
+export function computeExpected(
+  billedCents: number,
+  deductibleRemainingCents: number,
+  oopRemainingCents: number,
+  coinsurancePct: number,
+): number {
+  const deductibleApplied = Math.min(billedCents, Math.max(0, deductibleRemainingCents))
+  const afterDeductible = billedCents - deductibleApplied
+  const memberOop = Math.min(
+    deductibleApplied + Math.round(afterDeductible * coinsurancePct),
+    Math.max(0, oopRemainingCents),
+  )
+  return billedCents - memberOop
+}
+
 export const FLAG_LABELS: Record<string, string> = {
   MISSING: 'Missing',
   STALE_PENDING: 'Stale Pending',
