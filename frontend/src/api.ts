@@ -95,6 +95,7 @@ export const api = {
   providers: {
     aliases: () => req<ProviderAliasResponse[]>('/providers/aliases'),
     deleteAlias: (id: number) => req<void>(`/providers/aliases/${id}`, { method: 'DELETE' }),
+    networkDefaults: () => req<Record<string, string>>('/providers/network-defaults'),
   },
   planConfig: {
     get: () => req<PlanConfig>('/settings/plan-config'),

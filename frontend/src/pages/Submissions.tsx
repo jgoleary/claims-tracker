@@ -6,7 +6,7 @@ import type { BenefitsSnapshotOut, ExtractionResult, SubmissionCreate, Submissio
 import Modal from '../components/Modal'
 import AlertBadge from '../components/Alert'
 import RedactedName from '../components/RedactedName'
-import { computeExpected, formatCents, formatDate } from '../utils'
+import { computeExpected, formatCents, formatDate, normalizeProvider } from '../utils'
 import { useYear } from '../context/YearContext'
 import { useRedact } from '../context/RedactContext'
 
@@ -38,11 +38,17 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
 
   const { data: totals } = useQuery({ queryKey: ['totals', year], queryFn: () => api.totals.get(year) })
   const { data: planConfig } = useQuery({ queryKey: ['planConfig'], queryFn: api.planConfig.get })
+  const { data: networkDefaults } = useQuery({
+    queryKey: ['providerNetworkDefaults'],
+    queryFn: api.providers.networkDefaults,
+    enabled: !isEdit,
+  })
   const [step, setStep] = useState<1 | 2>(1)
   const [createdId, setCreatedId] = useState<string | null>(null)
   const [extracting, setExtracting] = useState(false)
   const [extractNote, setExtractNote] = useState<string | null>(null)
   const [expectedDirty, setExpectedDirty] = useState(false)
+  const [networkDirty, setNetworkDirty] = useState(false)
 
   const [form, setForm] = useState({
     member_name: initial?.member_name ?? '',
@@ -72,6 +78,16 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
     setForm((p) => ({ ...p, expected_reimbursement: (expected / 100).toFixed(2) }))
   }, [form.amount_billed, form.network_treatment, totals, planConfig, isEdit, expectedDirty])
 
+  // Default Network to the provider's most recently used value (network is a
+  // near-constant property of a provider). Skips edits and any manual override.
+  useEffect(() => {
+    if (isEdit || networkDirty || !networkDefaults) return
+    const last = networkDefaults[normalizeProvider(form.provider_name)]
+    if (last && last !== form.network_treatment) {
+      setForm((p) => ({ ...p, network_treatment: last as SubmissionCreate['network_treatment'] }))
+    }
+  }, [form.provider_name, form.network_treatment, networkDefaults, isEdit, networkDirty])
+
   const mutation = useMutation({
     mutationFn: async () => {
       const dollars = {
@@ -98,6 +114,7 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['submissions'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
+      qc.invalidateQueries({ queryKey: ['providerNetworkDefaults'] })
       if (isEdit) { onClose(); return }
       setCreatedId(result.id)
       window.open(ANTHEM_URL, '_blank')
@@ -192,7 +209,8 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Network</label>
-            <select value={form.network_treatment} onChange={set('network_treatment')}
+            <select value={form.network_treatment}
+              onChange={(e) => { setNetworkDirty(true); setForm((p) => ({ ...p, network_treatment: e.target.value as SubmissionCreate['network_treatment'] })) }}
               className="w-full border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="out_of_network">Out-of-Network</option>
               <option value="in_network_exception">In-Network Exception</option>

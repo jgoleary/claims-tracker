@@ -10,6 +10,11 @@ export function maskName(value: string | null | undefined, redact: boolean): str
   return value.trim().split(/\s+/).map(() => '***').join(' ')
 }
 
+/** JS mirror of the backend `matching.normalize()` so provider lookups key
+ *  identically: lowercase, collapse whitespace, strip non-alphanumerics. */
+export const normalizeProvider = (s: string) =>
+  s.toLowerCase().trim().replace(/\s+/g, ' ').replace(/[^a-z0-9 ]/g, '')
+
 export function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '—'
   const d = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr + 'T00:00:00')
