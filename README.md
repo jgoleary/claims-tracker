@@ -2,9 +2,9 @@
 
 A local web app to track OON medical claims submitted to Anthem.
 
-▶
-**[Watch the demo](https://github.com/jgoleary/claims-tracker/releases/download/v0.1.0/claims_tracker_demo.mp4)**
-(~6 min)
+## Demo
+
+https://github.com/user-attachments/assets/7fb4313a-447f-44e0-bc4b-893ba8bb11d3
 
 ## Why this exists
 
