@@ -1,9 +1,6 @@
 # Claims Tracker
 
-Local web app to track OON medical claims submitted to Anthem.
-
-> Claims Tracker runs entirely on your own Mac. Nothing is deployed to the cloud. Your
-> Anthem credentials live in the macOS Keychain and never leave the machine.
+A local web app to track OON medical claims submitted to Anthem.
 
 ## Why this exists
 
