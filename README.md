@@ -106,17 +106,12 @@ bash deploy/install.sh   # rebuilds the frontend, reinstalls deps, reloads agent
 ## Development
 
 Working on the code rather than just using the app? Skip the always-on service and run
-the two dev servers directly. First set up a virtualenv and the automation browser:
+the two dev servers directly. First set up the dev virtualenv and automation browser
+(one-time, ~150 MB Chromium download; safe to re-run):
 
 ```bash
-python3 -m venv backend/.venv
-backend/.venv/bin/pip install -r backend/requirements.txt
-backend/.venv/bin/playwright install chromium        # one-time, ~150 MB download
+bash deploy/dev_setup.sh
 ```
-
-There's a single `requirements.txt` (runtime + tests), so this venv can also run
-`pytest`. `deploy/install.sh` re-creates `backend/.venv` from the same file via `uv`,
-so the install and dev paths produce an equivalent environment.
 
 Then start the servers. The dev backend runs on **:8001** to avoid colliding with the
 always-on launch agent on :8000 (which `KeepAlive` would just respawn if you stopped
@@ -129,13 +124,6 @@ uvicorn app.main:app --reload --port 8001   # http://localhost:8001
 
 # Terminal 2 — frontend with hot reload
 cd frontend && npm install && npm run dev   # http://localhost:5173, proxies /api → :8001
-```
-
-To exercise the Anthem automation directly:
-
-```bash
-cd automation
-python fetch_all.py  # prompts for credentials, opens Chromium
 ```
 
 ## Tips
