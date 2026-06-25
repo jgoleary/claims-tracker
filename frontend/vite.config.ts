@@ -5,7 +5,9 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api': 'http://localhost:8000',
+      // Dev backend runs on :8001 so it doesn't collide with the always-on
+      // launch agent serving the built app on :8000.
+      '/api': 'http://localhost:8001',
     },
   },
 })

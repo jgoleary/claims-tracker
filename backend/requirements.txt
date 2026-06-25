@@ -7,3 +7,7 @@ playwright>=1.44.0
 requests>=2.31.0
 keyring>=24.0.0
 anthropic>=0.69.0
+
+# Tests (kept in the single requirements file; the delta over runtime is tiny).
+pytest>=8.0.0
+httpx>=0.27.0

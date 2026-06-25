@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 cd backend
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements-dev.txt
+pip install -r requirements.txt   # single file: runtime + test deps
 playwright install chromium   # one-time, needed for automation
 
 pytest                              # all tests
