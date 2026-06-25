@@ -1,36 +1,53 @@
 # Home Deployment + Scheduled Daily Refresh Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps
+> use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Run claims-tracker as an always-on local macOS service that refreshes Anthem data once per day, reading credentials from the Keychain and notifying the user when a run needs MFA.
+**Goal:** Run claims-tracker as an always-on local macOS service that refreshes Anthem
+data once per day, reading credentials from the Keychain and notifying the user when a run
+needs MFA.
 
-**Architecture:** Add a Keychain-backed credentials module and use it as a fallback in the existing `run_automation` worker, which also gains a macOS notification on failure (classifying MFA-needed vs. generic). FastAPI serves the built frontend so the whole app is one process. A `deploy/` directory provides `launchd` LaunchAgents (always-on server + daily refresh) plus setup/install scripts.
+**Architecture:** Add a Keychain-backed credentials module and use it as a fallback in the
+existing `run_automation` worker, which also gains a macOS notification on failure
+(classifying MFA-needed vs. generic). FastAPI serves the built frontend so the whole app
+is one process. A `deploy/` directory provides `launchd` LaunchAgents (always-on server +
+daily refresh) plus setup/install scripts.
 
-**Tech Stack:** Python 3 / FastAPI / SQLAlchemy (backend), `keyring` (macOS Keychain), `launchd`, `osascript`, React/Vite (frontend build).
+**Tech Stack:** Python 3 / FastAPI / SQLAlchemy (backend), `keyring` (macOS Keychain),
+`launchd`, `osascript`, React/Vite (frontend build).
 
 ## Global Constraints
 
 - All money is integer cents — not touched here, but never introduce floats.
-- Backend code lives under `backend/app/`; tests under `backend/tests/`; run with `pytest` from `backend/`.
+- Backend code lives under `backend/app/`; tests under `backend/tests/`; run with `pytest`
+  from `backend/`.
 - Credentials must never be written to a plaintext file or logged. Keychain only.
-- `notify()` and Keychain access are macOS-only and must degrade to a no-op / clear error off-platform (don't crash the worker).
-- Refresh interval is exactly `86400` seconds (once per day). Server binds `127.0.0.1:8000`.
-- Follow existing patterns: `keyring` added to `backend/requirements.txt`; helper functions are module-level and unit-tested; thread/subprocess orchestration is verified manually.
+- `notify()` and Keychain access are macOS-only and must degrade to a no-op / clear error
+  off-platform (don't crash the worker).
+- Refresh interval is exactly `86400` seconds (once per day). Server binds
+  `127.0.0.1:8000`.
+- Follow existing patterns: `keyring` added to `backend/requirements.txt`; helper
+  functions are module-level and unit-tested; thread/subprocess orchestration is verified
+  manually.
 
 ---
 
 ### Task 1: Keychain credentials module
 
 **Files:**
+
 - Modify: `backend/requirements.txt`
 - Create: `backend/app/credentials.py`
 - Test: `backend/tests/test_credentials.py`
 
 **Interfaces:**
+
 - Produces:
   - `credentials.SERVICE: str` = `"claims-tracker-anthem"`
   - `credentials.store_credentials(username: str, password: str) -> None`
-  - `credentials.get_credentials() -> tuple[str, str] | None` — returns `(username, password)` or `None` if either is missing.
+  - `credentials.get_credentials() -> tuple[str, str] | None` — returns
+    `(username, password)` or `None` if either is missing.
 
 - [ ] **Step 1: Add the dependency**
 
@@ -84,8 +101,8 @@ def test_get_returns_none_when_password_missing(monkeypatch):
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `cd backend && pytest tests/test_credentials.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'app.credentials'`
+Run: `cd backend && pytest tests/test_credentials.py -v` Expected: FAIL with
+`ModuleNotFoundError: No module named 'app.credentials'`
 
 - [ ] **Step 4: Write minimal implementation**
 
@@ -115,8 +132,7 @@ def get_credentials() -> tuple[str, str] | None:
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cd backend && pytest tests/test_credentials.py -v`
-Expected: PASS (3 tests)
+Run: `cd backend && pytest tests/test_credentials.py -v` Expected: PASS (3 tests)
 
 - [ ] **Step 6: Commit**
 
@@ -130,10 +146,12 @@ git commit -m "feat: Keychain-backed Anthem credentials module"
 ### Task 2: Keychain fallback + failure notification in the automation worker
 
 **Files:**
+
 - Modify: `backend/app/automation.py`
 - Test: `backend/tests/test_automation.py` (append)
 
 **Interfaces:**
+
 - Consumes: `credentials.get_credentials()` from Task 1.
 - Produces (new module-level helpers in `app.automation`):
   - `_resolve_credentials(username: str, password: str) -> tuple[str, str] | None`
@@ -187,12 +205,13 @@ def test_notify_swallows_errors():
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd backend && pytest tests/test_automation.py -v`
-Expected: FAIL (`AttributeError: ... has no attribute '_resolve_credentials'`)
+Run: `cd backend && pytest tests/test_automation.py -v` Expected: FAIL
+(`AttributeError: ... has no attribute '_resolve_credentials'`)
 
 - [ ] **Step 3: Implement the helpers and wire them into the worker**
 
-Edit `backend/app/automation.py`. Add the import near the top (after the existing imports):
+Edit `backend/app/automation.py`. Add the import near the top (after the existing
+imports):
 
 ```python
 from app import credentials
@@ -226,7 +245,8 @@ def _classify_failure(summary: dict) -> str:
     return "Anthem refresh failed — check the Refresh page for details."
 ```
 
-Replace the body of `_worker` in `run_automation` with credential resolution + notification:
+Replace the body of `_worker` in `run_automation` with credential resolution +
+notification:
 
 ```python
     def _worker():
@@ -278,12 +298,13 @@ Replace the body of `_worker` in `run_automation` with credential resolution + n
             notify("Claims Tracker", _classify_failure(summary))
 ```
 
-Note: the manual UI flow still passes `username`/`password`; the scheduled flow passes empty strings and falls back to the Keychain.
+Note: the manual UI flow still passes `username`/`password`; the scheduled flow passes
+empty strings and falls back to the Keychain.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd backend && pytest tests/test_automation.py -v`
-Expected: PASS (all, including the four pre-existing route tests)
+Run: `cd backend && pytest tests/test_automation.py -v` Expected: PASS (all, including the
+four pre-existing route tests)
 
 - [ ] **Step 5: Commit**
 
@@ -297,12 +318,16 @@ git commit -m "feat: Keychain fallback + MFA/failure notification in refresh wor
 ### Task 3: Serve the built frontend from FastAPI
 
 **Files:**
+
 - Create: `backend/app/static_serve.py`
 - Modify: `backend/app/main.py`
 - Test: `backend/tests/test_static_serve.py`
 
 **Interfaces:**
-- Produces: `static_serve.create_spa_router(dist: pathlib.Path) -> fastapi.APIRouter` — a catch-all GET router that serves an existing file under `dist`, returns `dist/index.html` for unmatched non-API paths, and 404s paths starting with `api`.
+
+- Produces: `static_serve.create_spa_router(dist: pathlib.Path) -> fastapi.APIRouter` — a
+  catch-all GET router that serves an existing file under `dist`, returns
+  `dist/index.html` for unmatched non-API paths, and 404s paths starting with `api`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -352,8 +377,8 @@ def test_root_serves_index(tmp_path):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd backend && pytest tests/test_static_serve.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'app.static_serve'`
+Run: `cd backend && pytest tests/test_static_serve.py -v` Expected: FAIL with
+`ModuleNotFoundError: No module named 'app.static_serve'`
 
 - [ ] **Step 3: Write the implementation**
 
@@ -384,8 +409,7 @@ def create_spa_router(dist: Path) -> APIRouter:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd backend && pytest tests/test_static_serve.py -v`
-Expected: PASS (4 tests)
+Run: `cd backend && pytest tests/test_static_serve.py -v` Expected: PASS (4 tests)
 
 - [ ] **Step 5: Wire it into `main.py`**
 
@@ -397,7 +421,8 @@ from pathlib import Path
 from app.static_serve import create_spa_router
 ```
 
-At the **end** of the file (after all `include_router` calls and the `on_startup` handler), append:
+At the **end** of the file (after all `include_router` calls and the `on_startup`
+handler), append:
 
 ```python
 _DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
@@ -405,12 +430,13 @@ if _DIST.exists():
     app.include_router(create_spa_router(_DIST))
 ```
 
-The catch-all is registered last, so all `/api/...` routes keep precedence; the SPA router only handles everything else. It is gated on `_DIST.exists()` so `npm run dev` (no build) and the test suite are unaffected.
+The catch-all is registered last, so all `/api/...` routes keep precedence; the SPA router
+only handles everything else. It is gated on `_DIST.exists()` so `npm run dev` (no build)
+and the test suite are unaffected.
 
 - [ ] **Step 6: Verify the full suite still passes**
 
-Run: `cd backend && pytest -q`
-Expected: PASS (all tests)
+Run: `cd backend && pytest -q` Expected: PASS (all tests)
 
 - [ ] **Step 7: Commit**
 
@@ -424,6 +450,7 @@ git commit -m "feat: serve built frontend SPA from FastAPI"
 ### Task 4: Deploy tooling (LaunchAgents, install/setup scripts)
 
 **Files:**
+
 - Create: `deploy/store_credentials.py`
 - Create: `deploy/refresh.sh`
 - Create: `deploy/com.claimstracker.server.plist.template`
@@ -433,8 +460,11 @@ git commit -m "feat: serve built frontend SPA from FastAPI"
 - Create: `deploy/README.md`
 
 **Interfaces:**
-- Consumes: `app.credentials.store_credentials` (Task 1), `POST /api/automation/run` (existing), the daily-interval constant `86400`.
-- Templates use the literal token `@@ROOT@@`, replaced with the absolute repo path by `install.sh`.
+
+- Consumes: `app.credentials.store_credentials` (Task 1), `POST /api/automation/run`
+  (existing), the daily-interval constant `86400`.
+- Templates use the literal token `@@ROOT@@`, replaced with the absolute repo path by
+  `install.sh`.
 
 - [ ] **Step 1: Credential setup script**
 
@@ -596,49 +626,56 @@ Create `deploy/README.md`:
 ```markdown
 # Deployment (macOS, local)
 
-One-time setup of claims-tracker as an always-on local service with a daily
-Anthem refresh.
+One-time setup of claims-tracker as an always-on local service with a daily Anthem
+refresh.
 
 ## Prerequisites
+
 - Backend venv created and deps installed:
   `cd backend && python -m venv .venv && source .venv/bin/activate && pip install -r requirements-dev.txt && playwright install chromium`
 
 ## Install
+
 1. Store Anthem credentials in the Keychain (terminal only — never the web UI):
    `backend/.venv/bin/python deploy/store_credentials.py`
-2. Build + install the LaunchAgents:
-   `bash deploy/install.sh`
+2. Build + install the LaunchAgents: `bash deploy/install.sh`
 3. Open the dashboard at http://localhost:8000
 
 ## How it runs
+
 - `com.claimstracker.server` — uvicorn on 127.0.0.1:8000, restarts on crash and at login.
-- `com.claimstracker.refresh` — runs `deploy/refresh.sh` once per day (StartInterval 86400).
-  A run missed during sleep fires shortly after the laptop wakes.
+- `com.claimstracker.refresh` — runs `deploy/refresh.sh` once per day (StartInterval
+  86400). A run missed during sleep fires shortly after the laptop wakes.
 
 ## MFA
-Anthem's Okta session expires periodically. When it does, the scheduled run fails
-and you get a macOS notification: "Anthem refresh needs MFA". Open the Refresh
-page, run it manually, and complete MFA in the visible browser once. Scheduled runs
-then resume silently. **The Mac must be logged in** (locked screen / asleep display
-are fine) for a scheduled run to open the browser.
+
+Anthem's Okta session expires periodically. When it does, the scheduled run fails and you
+get a macOS notification: "Anthem refresh needs MFA". Open the Refresh page, run it
+manually, and complete MFA in the visible browser once. Scheduled runs then resume
+silently. **The Mac must be logged in** (locked screen / asleep display are fine) for a
+scheduled run to open the browser.
 
 ## Logs
+
 - `data/logs/server.log`
 - `data/logs/refresh.log`
 
 ## Uninstall
+
 `bash deploy/uninstall.sh`
 ```
 
 - [ ] **Step 8: Make scripts executable and verify syntax**
 
 Run:
+
 ```bash
 chmod +x deploy/refresh.sh deploy/install.sh deploy/uninstall.sh
 bash -n deploy/refresh.sh && bash -n deploy/install.sh && bash -n deploy/uninstall.sh
 sed 's|@@ROOT@@|/tmp/x|g' deploy/com.claimstracker.server.plist.template | plutil -lint -
 sed 's|@@ROOT@@|/tmp/x|g' deploy/com.claimstracker.refresh.plist.template | plutil -lint -
 ```
+
 Expected: no syntax errors; both plists report `OK`.
 
 - [ ] **Step 9: Commit**
@@ -654,17 +691,25 @@ git commit -m "feat: macOS deploy tooling — LaunchAgents, install + credential
 
 These require the real machine + Anthem account and are not automated:
 
-1. `bash deploy/install.sh` → dashboard loads at `http://localhost:8000` (frontend served by FastAPI).
+1. `bash deploy/install.sh` → dashboard loads at `http://localhost:8000` (frontend served
+   by FastAPI).
 2. `backend/.venv/bin/python deploy/store_credentials.py` → stores creds; verify with
    `security find-generic-password -s claims-tracker-anthem` (returns an item).
-3. `bash deploy/refresh.sh` → a refresh starts; with a valid session it completes and
-   data updates; `data/logs/refresh.log` shows the run.
-4. Temporarily expire/clear the browser profile to force MFA → confirm the macOS
-   "needs MFA" notification fires and the Refresh page shows `failed`.
+3. `bash deploy/refresh.sh` → a refresh starts; with a valid session it completes and data
+   updates; `data/logs/refresh.log` shows the run.
+4. Temporarily expire/clear the browser profile to force MFA → confirm the macOS "needs
+   MFA" notification fires and the Refresh page shows `failed`.
 5. `launchctl list | grep claimstracker` → both agents present.
 
 ## Self-Review notes
 
-- **Spec coverage:** §1 always-on service → Task 3 + server plist (Task 4). §2 daily refresh Option A → refresh plist `StartInterval 86400` + `RunAtLoad` (Task 4). §3 Keychain creds → Tasks 1–2 (+ setup script Task 4); location moved to `backend/app/credentials.py` for importability/testability, env-var injection preserved per spec §3. §4 MFA + notify → Task 2 (`notify`, `_classify_failure`). §5 install tooling → Task 4. Out-of-scope items (Tailscale, email, Docker) correctly absent.
+- **Spec coverage:** §1 always-on service → Task 3 + server plist (Task 4). §2 daily
+  refresh Option A → refresh plist `StartInterval 86400` + `RunAtLoad` (Task 4). §3
+  Keychain creds → Tasks 1–2 (+ setup script Task 4); location moved to
+  `backend/app/credentials.py` for importability/testability, env-var injection preserved
+  per spec §3. §4 MFA + notify → Task 2 (`notify`, `_classify_failure`). §5 install
+  tooling → Task 4. Out-of-scope items (Tailscale, email, Docker) correctly absent.
 - **Placeholders:** none — all code blocks complete.
-- **Type consistency:** `get_credentials`/`store_credentials`/`SERVICE` names consistent across Tasks 1, 2, 4; `_resolve_credentials`, `_classify_failure`, `notify`, `create_spa_router` signatures consistent between definition and use.
+- **Type consistency:** `get_credentials`/`store_credentials`/`SERVICE` names consistent
+  across Tasks 1, 2, 4; `_resolve_credentials`, `_classify_failure`, `notify`,
+  `create_spa_router` signatures consistent between definition and use.

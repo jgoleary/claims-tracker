@@ -1,12 +1,18 @@
 # Claims Tracker — Backend Core Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps
+> use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Working, fully-tested Python package containing the DB models, matching engine, and ingest logic — no FastAPI dependency, exercisable with pytest alone.
+**Goal:** Working, fully-tested Python package containing the DB models, matching engine,
+and ingest logic — no FastAPI dependency, exercisable with pytest alone.
 
-**Architecture:** SQLAlchemy 2.0 ORM with SQLite. Pure Python modules for matching and ingest with no web framework dependency so they can be unit tested in isolation. The FastAPI API layer (Plan 2) imports these modules and wires them to HTTP routes.
+**Architecture:** SQLAlchemy 2.0 ORM with SQLite. Pure Python modules for matching and
+ingest with no web framework dependency so they can be unit tested in isolation. The
+FastAPI API layer (Plan 2) imports these modules and wires them to HTTP routes.
 
-**Tech Stack:** Python 3.11+, SQLAlchemy 2.0, pytest, no async (sync SQLAlchemy + sync FastAPI in Plan 2)
+**Tech Stack:** Python 3.11+, SQLAlchemy 2.0, pytest, no async (sync SQLAlchemy + sync
+FastAPI in Plan 2)
 
 ---
 
@@ -43,6 +49,7 @@ claims-tracker/
 ## Task 1: Project Scaffold
 
 **Files:**
+
 - Create: `.gitignore`
 - Create: `README.md`
 - Create: `backend/requirements.txt`
@@ -115,7 +122,7 @@ pythonpath = ["."]
 
 - [ ] **Step 6: Write `README.md`**
 
-```markdown
+````markdown
 # Claims Tracker
 
 Local web app to track OON medical claims submitted to Anthem.
@@ -123,6 +130,7 @@ Local web app to track OON medical claims submitted to Anthem.
 ## Development
 
 ### Backend
+
 ```bash
 cd backend
 python -m venv .venv && source .venv/bin/activate
@@ -130,19 +138,23 @@ pip install -r requirements-dev.txt
 pytest
 uvicorn app.main:app --reload  # after Plan 2
 ```
+````
 
 ### Frontend
+
 ```bash
 cd frontend
 npm install && npm run dev  # after Plan 3
 ```
 
 ### Automation
+
 ```bash
 cd automation
 python fetch_all.py  # prompts for credentials, opens Chromium
 ```
-```
+
+````
 
 - [ ] **Step 7: Install dependencies and verify Python version**
 
@@ -151,7 +163,7 @@ cd backend
 python3 --version  # must be 3.11+
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-```
+````
 
 Expected: pip installs without errors.
 
@@ -167,6 +179,7 @@ git commit -m "feat: project scaffold"
 ## Task 2: Config and Database
 
 **Files:**
+
 - Create: `backend/app/config.py`
 - Create: `backend/app/database.py`
 - Create: `backend/tests/conftest.py`
@@ -325,6 +338,7 @@ git commit -m "feat: config constants and database session setup"
 ## Task 3: SQLAlchemy Models
 
 **Files:**
+
 - Create: `backend/app/models.py`
 - Create: `backend/tests/test_models.py`
 
@@ -567,6 +581,7 @@ git commit -m "feat: SQLAlchemy models for all five tables"
 ## Task 4: Storage Interface
 
 **Files:**
+
 - Create: `backend/app/storage.py`
 - Create: `backend/tests/test_storage.py`
 
@@ -698,7 +713,8 @@ git commit -m "feat: Storage interface and LocalFileStorage implementation"
 ## Task 5: Matching Engine — normalize() and Provider Matching
 
 **Files:**
-- Create: `backend/app/matching.py` (partial — normalize and _provider_matches only)
+
+- Create: `backend/app/matching.py` (partial — normalize and \_provider_matches only)
 - Create: `backend/tests/test_matching.py` (partial)
 
 - [ ] **Step 1: Write failing tests for normalize()**
@@ -741,7 +757,8 @@ pytest tests/test_matching.py::TestNormalize -v
 
 Expected: `ImportError: cannot import name 'normalize' from 'app.matching'`
 
-- [ ] **Step 3: Write `backend/app/matching.py` with normalize() and _provider_matches()**
+- [ ] **Step 3: Write `backend/app/matching.py` with normalize() and
+      \_provider_matches()**
 
 ```python
 import re
@@ -790,7 +807,7 @@ def run_matching(db: Session) -> MatchResult:
     raise NotImplementedError
 ```
 
-- [ ] **Step 4: Write failing tests for _provider_matches()**
+- [ ] **Step 4: Write failing tests for \_provider_matches()**
 
 Append to `backend/tests/test_matching.py`:
 
@@ -828,7 +845,8 @@ class TestProviderMatches:
 pytest tests/test_matching.py -v
 ```
 
-Expected: All normalize and _provider_matches tests pass. `run_matching` tests don't exist yet.
+Expected: All normalize and \_provider_matches tests pass. `run_matching` tests don't
+exist yet.
 
 - [ ] **Step 6: Commit**
 
@@ -842,6 +860,7 @@ git commit -m "feat: matching engine normalize() and provider matching"
 ## Task 6: Matching Engine — run_matching()
 
 **Files:**
+
 - Modify: `backend/app/matching.py` (implement run_matching)
 - Modify: `backend/tests/test_matching.py` (add run_matching tests)
 
@@ -1023,6 +1042,7 @@ git commit -m "feat: run_matching() with auto, suggestion, and conflict handling
 ## Task 7: CSV Parsing Utilities
 
 **Files:**
+
 - Create: `backend/app/ingest.py` (parsing utils only)
 - Create: `backend/tests/test_ingest.py` (parsing tests only)
 
@@ -1190,12 +1210,14 @@ git commit -m "feat: CSV parsing utilities (money, date, patient name, status)"
 ## Task 8: Ingest — ingest_claims_csv() and ingest_benefits()
 
 **Files:**
+
 - Modify: `backend/app/ingest.py` (implement the two ingest functions)
 - Modify: `backend/tests/test_ingest.py` (add ingest tests)
 
 - [ ] **Step 1: Write failing tests for ingest_claims_csv()**
 
-Add these imports to the top of `backend/tests/test_ingest.py` (after the existing imports):
+Add these imports to the top of `backend/tests/test_ingest.py` (after the existing
+imports):
 
 ```python
 from sqlalchemy.orm import Session
@@ -1204,7 +1226,8 @@ from app.ingest import ingest_claims_csv, ingest_benefits
 from app.models import AnthemClaim, BenefitsSnapshot, Match
 ```
 
-Then append the following constants and test classes to the bottom of `backend/tests/test_ingest.py`:
+Then append the following constants and test classes to the bottom of
+`backend/tests/test_ingest.py`:
 
 ```python
 SAMPLE_CSV = """\
@@ -1304,7 +1327,8 @@ pytest tests/test_ingest.py::TestIngestClaimsCSV tests/test_ingest.py::TestInges
 
 Expected: `NotImplementedError`
 
-- [ ] **Step 3: Implement ingest_claims_csv() and ingest_benefits() in `backend/app/ingest.py`**
+- [ ] **Step 3: Implement ingest_claims_csv() and ingest_benefits() in
+      `backend/app/ingest.py`**
 
 Replace the two `raise NotImplementedError` stubs:
 
@@ -1394,6 +1418,9 @@ git commit -m "feat: ingest_claims_csv() and ingest_benefits() with full test co
 
 ## Done
 
-Backend core is complete: DB models, storage interface, matching engine, and ingest logic are all tested and working. The FastAPI API layer (Plan 2) imports these modules and wires them to HTTP routes.
+Backend core is complete: DB models, storage interface, matching engine, and ingest logic
+are all tested and working. The FastAPI API layer (Plan 2) imports these modules and wires
+them to HTTP routes.
 
-**Next:** `docs/superpowers/plans/2026-05-15-api-layer.md` — FastAPI routes, automation subprocess runner, and the `data/state.json` refresh state tracker.
+**Next:** `docs/superpowers/plans/2026-05-15-api-layer.md` — FastAPI routes, automation
+subprocess runner, and the `data/state.json` refresh state tracker.

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Canonicalize staged Markdown with Prettier before each commit, so committed
+# files always match VS Code's format-on-save output. See .prettierrc.
+set -euo pipefail
+
+# Staged, non-deleted Markdown files (bash 3.2-compatible: no mapfile).
+files=()
+while IFS= read -r f; do
+  files+=("$f")
+done < <(git diff --cached --name-only --diff-filter=ACMR -- '*.md' '*.markdown')
+[ ${#files[@]} -eq 0 ] && exit 0
+
+if ! command -v npx >/dev/null 2>&1; then
+  echo "pre-commit: npx not found; skipping Markdown formatting." >&2
+  exit 0
+fi
+
+npx --no-install prettier --write "${files[@]}" 2>/dev/null \
+  || npx prettier --write "${files[@]}"
+
+# Re-stage anything Prettier reformatted.
+git add -- "${files[@]}"

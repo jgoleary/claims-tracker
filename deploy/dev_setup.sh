@@ -13,6 +13,9 @@ python3 -m venv "$VENV"
 echo "Installing the automation browser (Chromium)..."
 "$VENV/bin/playwright" install chromium
 
+echo "Enabling the Prettier pre-commit hook..."
+git -C "$ROOT" config core.hooksPath .githooks
+
 cat <<EOF
 
 Done. Start the dev servers in two terminals:
