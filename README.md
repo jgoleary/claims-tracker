@@ -123,6 +123,9 @@ bash deploy/install.sh   # rebuilds the frontend, reinstalls deps, reloads agent
 
 ## Development
 
+New to the codebase? Start with [ARCHITECTURE.md](ARCHITECTURE.md) for a high-level map of
+how the frontend, backend, and automation fit together.
+
 Working on the code rather than just using the app? Skip the always-on service and run the
 two dev servers directly. First set up the dev virtualenv and automation browser
 (one-time, ~150 MB Chromium download; safe to re-run):
