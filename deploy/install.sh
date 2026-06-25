@@ -16,9 +16,19 @@ echo "Claims Tracker installer - $ROOT"
 # 1. Clear quarantine on anything that arrived via a browser-downloaded zip.
 xattr -dr com.apple.quarantine "$ROOT" 2>/dev/null || true
 
-# 2. Refuse to run without the prebuilt frontend (release must include it).
+# 2. Ensure the frontend is built. Release tarballs ship a prebuilt frontend/dist and
+#    carry no .git; a source checkout (has .git) is rebuilt here so updates aren't stale.
+#    Also build when dist is simply missing, as long as npm is available.
+if [ -d "$ROOT/.git" ] || [ ! -f "$ROOT/frontend/dist/index.html" ]; then
+  if [ -f "$ROOT/frontend/package.json" ] && command -v npm >/dev/null 2>&1; then
+    echo "Building the frontend..."
+    npm --prefix "$ROOT/frontend" ci
+    npm --prefix "$ROOT/frontend" run build
+  fi
+fi
 if [ ! -f "$ROOT/frontend/dist/index.html" ]; then
-  echo "ERROR: frontend/dist is missing. Install from a release built with deploy/make_release.sh."
+  echo "ERROR: frontend/dist is missing and could not be built."
+  echo "Install Node.js + npm and re-run, or use a release built with deploy/make_release.sh."
   exit 1
 fi
 
