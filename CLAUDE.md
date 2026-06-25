@@ -99,7 +99,7 @@ Playwright scripts that log into Anthem and pull data. Dependencies are in the *
 `data/` is gitignored and holds the SQLite DB (`data/claims.db`), PDF uploads (`data/pdfs/`), automation state (`data/state.json`), browser session (`data/browser-profile/`), Playwright exports (`data/exports/`), and deployment logs (`data/logs/`).
 
 ### Deployment (`deploy/`)
-Runs as an **always-on local macOS service**; not cloud. Full runbook in `deploy/README.md`.
+Runs as an **always-on local macOS service**; not cloud. User-facing install/runbook lives in the repo `README.md` (Manual setup + Tips sections).
 - **`backend/app/static_serve.py`** — `create_spa_router(dist)` serves the built `frontend/dist` (catch-all GET: existing file → file, otherwise `index.html`; `api/*` → 404). `main.py` includes it only when `frontend/dist` exists, so `npm run dev` and the test suite are unaffected.
 - **`install.sh`** builds the frontend and installs two `launchd` LaunchAgents (templates rendered with the absolute repo root replacing `@@ROOT@@`); `uninstall.sh` removes them.
   - `com.claimstracker.server` — `uvicorn` on `127.0.0.1:8000` with `KeepAlive`; serves API + SPA. Logs → `data/logs/server.log`.
