@@ -2,8 +2,28 @@
 
 Local web app to track OON medical claims submitted to Anthem.
 
-> Claims Tracker runs entirely on your own Mac. Nothing is deployed to the cloud.
-> Your Anthem credentials live in the macOS Keychain and never leave the machine.
+> Claims Tracker runs entirely on your own Mac. Nothing is deployed to the cloud. Your
+> Anthem credentials live in the macOS Keychain and never leave the machine.
+
+## Why this exists
+
+Anthem's manual claim submission process is unreliable. Claims you submit sometimes go
+unprocessed entirely, and the ones that do get processed are sometimes processed
+incorrectly — for example, OON benefits might get applied when an in-network override
+(such as the "Autism clause") should have been, leaving you reimbursed less than you're
+owed.
+
+Tracking manually submitted claims as they move through this process is cumbersome. If you
+want to identify claims that have stalled or been processed incorrectly, you have to
+engage in careful bookkeeping — many Anthem members have reported they keep elaborate
+spreadsheets up to date by hand for this purpose.
+
+This app aims to automate as much of that bookkeeping as possible. You record the OON
+claims you've submitted along with what you _should_ be reimbursed for each one. The app
+then checks Anthem's portal automatically every day and compares the current state of
+Anthem's processing against your expectations. When a claim stalls, vanishes from Anthem's
+export, gets denied, or is reimbursed for less than expected, it surfaces an alert — so
+you know exactly which claims to escalate and why, instead of finding out months later.
 
 ## Easy Install (macOS)
 
@@ -16,11 +36,11 @@ Open Terminal and paste:
 curl -fsSL https://github.com/jgoleary/claims-tracker/releases/latest/download/bootstrap.sh | bash
 ```
 
-The installer downloads everything it needs and asks for your Anthem login (saved only
-to the macOS Keychain). You end up with a local web app at <http://localhost:8000> that
+The installer downloads everything it needs and asks for your Anthem login (saved only to
+the macOS Keychain). You end up with a local web app at <http://localhost:8000> that
 starts automatically at login, plus a background job that refreshes your Anthem claims
-once a day. The first claims refresh opens a browser window so you can complete
-Anthem's multi-factor login once.
+once a day. The first claims refresh opens a browser window so you can complete Anthem's
+multi-factor login once.
 
 To update, re-run the install command above — it updates an existing install in place.
 
@@ -30,16 +50,16 @@ To update, re-run the install command above — it updates an existing install i
 bash ~/claims-tracker/deploy/uninstall.sh
 ```
 
-This stops the background agents. Your data and saved credentials are left untouched;
-the script prints how to remove them completely.
+This stops the background agents. Your data and saved credentials are left untouched; the
+script prints how to remove them completely.
 
 ---
 
 ## Manual setup from source
 
-The one-command installer above is the easiest path. Install from source if you're
-working on the code or want to run each step yourself. This assumes you're comfortable
-with the Terminal.
+The one-command installer above is the easiest path. Install from source if you're working
+on the code or want to run each step yourself. This assumes you're comfortable with the
+Terminal.
 
 ### Prerequisites
 
@@ -55,9 +75,8 @@ Install these first if you don't already have them:
 | **(optional) Anthropic API key** | Enables PDF auto-fill of new claims | —                    |
 
 If `python3`, `node`, or `git` are missing, install them (e.g. from
-[python.org](https://www.python.org/downloads/),
-[nodejs.org](https://nodejs.org/), and the Xcode Command Line Tools via
-`xcode-select --install`) before continuing.
+[python.org](https://www.python.org/downloads/), [nodejs.org](https://nodejs.org/), and
+the Xcode Command Line Tools via `xcode-select --install`) before continuing.
 
 ### 1. Get the code
 
@@ -72,22 +91,21 @@ cd claims-tracker
 bash deploy/install.sh
 ```
 
-`install.sh` is self-contained: it builds the frontend (release tarballs ship it
-prebuilt; from a clone it runs `npm ci && npm run build` for you), provisions a pinned
-Python and the backend dependencies (via [`uv`](https://docs.astral.sh/uv/)), downloads
-the automation browser (Chromium), prompts for your Anthem login and an optional
-Anthropic API key — stored only in the macOS Keychain — and loads the two launchd
-agents described under [How it runs](#how-it-runs). When it finishes, the app is
-running at <http://localhost:8000>.
+`install.sh` is self-contained: it builds the frontend (release tarballs ship it prebuilt;
+from a clone it runs `npm ci && npm run build` for you), provisions a pinned Python and
+the backend dependencies (via [`uv`](https://docs.astral.sh/uv/)), downloads the
+automation browser (Chromium), prompts for your Anthem login and an optional Anthropic API
+key — stored only in the macOS Keychain — and loads the two launchd agents described under
+[How it runs](#how-it-runs). When it finishes, the app is running at
+<http://localhost:8000>.
 
-The first claims refresh opens a Chromium window so you can complete Anthem's
-multi-factor authentication. After that the session is remembered until Anthem expires
-it.
+The first claims refresh opens a Chromium window so you can complete Anthem's multi-factor
+authentication. After that the session is remembered until Anthem expires it.
 
 ### Changing credentials later
 
-Credentials live in the Keychain and never pass through the web app. Re-run the script
-any time (e.g. after a password change):
+Credentials live in the Keychain and never pass through the web app. Re-run the script any
+time (e.g. after a password change):
 
 ```bash
 backend/.venv/bin/python deploy/store_credentials.py              # Anthem login
@@ -105,8 +123,8 @@ bash deploy/install.sh   # rebuilds the frontend, reinstalls deps, reloads agent
 
 ## Development
 
-Working on the code rather than just using the app? Skip the always-on service and run
-the two dev servers directly. First set up the dev virtualenv and automation browser
+Working on the code rather than just using the app? Skip the always-on service and run the
+two dev servers directly. First set up the dev virtualenv and automation browser
 (one-time, ~150 MB Chromium download; safe to re-run):
 
 ```bash
@@ -114,8 +132,7 @@ bash deploy/dev_setup.sh
 ```
 
 Then start the servers. The dev backend runs on **:8001** to avoid colliding with the
-always-on launch agent on :8000 (which `KeepAlive` would just respawn if you stopped
-it):
+always-on launch agent on :8000 (which `KeepAlive` would just respawn if you stopped it):
 
 ```bash
 # Terminal 1 — backend with auto-reload
@@ -130,23 +147,23 @@ cd frontend && npm install && npm run dev   # http://localhost:5173, proxies /ap
 
 ### How it runs
 
-`deploy/install.sh` — run by both the easy installer and the from-source setup — loads
-two launchd agents:
+`deploy/install.sh` — run by both the easy installer and the from-source setup — loads two
+launchd agents:
 
-- `com.claimstracker.server` — the web server on `127.0.0.1:8000`, restarted on crash
-  and at every login.
-- `com.claimstracker.refresh` — runs once a day to pull fresh claims from Anthem. A
-  run missed while the Mac is asleep fires shortly after it wakes.
+- `com.claimstracker.server` — the web server on `127.0.0.1:8000`, restarted on crash and
+  at every login.
+- `com.claimstracker.refresh` — runs once a day to pull fresh claims from Anthem. A run
+  missed while the Mac is asleep fires shortly after it wakes.
 
 ### Multi-factor authentication (MFA)
 
-Anthem's login session expires periodically. When it does, a scheduled refresh fails
-and you'll get a macOS notification: **"Anthem refresh needs MFA."** Open the
-**Refresh** page in the app, click **Refresh Now**, and complete MFA in the Chromium
-window that appears. Scheduled runs then resume on their own.
+Anthem's login session expires periodically. When it does, a scheduled refresh fails and
+you'll get a macOS notification: **"Anthem refresh needs MFA."** Open the **Refresh** page
+in the app, click **Refresh Now**, and complete MFA in the Chromium window that appears.
+Scheduled runs then resume on their own.
 
-The Mac must be **logged in** for a scheduled refresh to open the browser (a locked
-screen or sleeping display is fine; fully logged out is not).
+The Mac must be **logged in** for a scheduled refresh to open the browser (a locked screen
+or sleeping display is fine; fully logged out is not).
 
 ### Everyday operation
 
@@ -171,5 +188,5 @@ Logs are written to `data/logs/server.log` and `data/logs/refresh.log`.
   work, then re-run.
 - **Refresh keeps asking for MFA** — make sure the Mac is logged in when the daily job
   runs; complete MFA once from the Refresh page.
-- **App won't load at :8000** — check `launchctl list | grep claimstracker` and the
-  tail of `data/logs/server.log`.
+- **App won't load at :8000** — check `launchctl list | grep claimstracker` and the tail
+  of `data/logs/server.log`.
