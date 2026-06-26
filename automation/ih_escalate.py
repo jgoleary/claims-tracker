@@ -28,7 +28,7 @@ import ih_auth
 _REVIEW_TIMEOUT_MS = 240_000
 
 # Fixed answer for the "What is your desired outcome for this process?" field.
-_DESIRED_OUTCOME = "accurate processing of my claim"
+_DESIRED_OUTCOME = "Accurate processing of my claim"
 
 
 def _wait_for_close(page: Page) -> None:
