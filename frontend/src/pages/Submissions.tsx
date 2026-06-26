@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
 import type { BenefitsSnapshotOut, ExtractionResult, SubmissionCreate, SubmissionResponse } from '../types'
 import Modal from '../components/Modal'
+import EscalationModal from '../components/EscalationModal'
 import AlertBadge from '../components/Alert'
 import RedactedName from '../components/RedactedName'
 import { computeExpected, formatCents, formatDate, normalizeProvider } from '../utils'
@@ -283,6 +284,7 @@ export default function Submissions() {
   const { year } = useYear()
   const [showAdd, setShowAdd] = useState(false)
   const [editing, setEditing] = useState<SubmissionResponse | null>(null)
+  const [escalating, setEscalating] = useState<SubmissionResponse | null>(null)
   const [filterMember, setFilterMember] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
 
@@ -360,15 +362,26 @@ export default function Submissions() {
                   <td className="px-4 py-3">
                     <div className="flex gap-1 flex-wrap">
                       {sub.flags.map((f, i) => <AlertBadge key={i} flag={f.flag} severity={f.severity} />)}
+                      {sub.escalated_at && (
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">Escalated</span>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => setEditing(sub)}
-                      className="text-xs text-gray-400 hover:text-blue-600 transition-colors"
-                    >
-                      Edit
-                    </button>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setEscalating(sub)}
+                        className="text-xs text-gray-400 hover:text-amber-600 transition-colors"
+                      >
+                        Escalate
+                      </button>
+                      <button
+                        onClick={() => setEditing(sub)}
+                        className="text-xs text-gray-400 hover:text-blue-600 transition-colors"
+                      >
+                        Edit
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -392,6 +405,12 @@ export default function Submissions() {
           initial={editing}
           memberNames={memberNames}
           providerNames={providerNames}
+        />
+      )}
+      {escalating && (
+        <EscalationModal
+          submission={escalating}
+          onClose={() => setEscalating(null)}
         />
       )}
     </div>

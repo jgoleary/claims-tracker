@@ -48,6 +48,7 @@ class SubmissionResponse(BaseModel):
     submission_method: str
     pdf_path: Optional[str]
     notes: Optional[str]
+    escalated_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
     anthem_claim_number: Optional[str] = None
@@ -197,6 +198,26 @@ class PlanConfigUpdate(BaseModel):
 
 class AutomationStatus(BaseModel):
     status: Literal["idle", "running", "complete", "failed"]
+    last_run_at: Optional[datetime]
+    summary: Optional[dict[str, Any]]
+
+
+# ── Escalation (Included Health) ─────────────────────────────────────────────
+
+class EscalationDraft(BaseModel):
+    configured: bool          # whether an Anthropic key was available for AI refinement
+    source: Literal["template", "ai"]
+    message: str              # always populated, even with no key
+    error: Optional[str] = None
+
+
+class EscalationRun(BaseModel):
+    message: str
+
+
+class EscalationStatus(BaseModel):
+    status: Literal["idle", "running", "complete", "failed"]
+    submission_id: Optional[str] = None
     last_run_at: Optional[datetime]
     summary: Optional[dict[str, Any]]
 

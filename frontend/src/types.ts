@@ -16,6 +16,7 @@ export interface SubmissionResponse {
   submission_method: 'portal' | 'email'
   pdf_path: string | null
   notes: string | null
+  escalated_at: string | null
   created_at: string
   updated_at: string
   anthem_claim_number: string | null
@@ -127,6 +128,20 @@ export interface TotalsResponse {
 
 export interface AutomationStatus {
   status: 'idle' | 'running' | 'complete' | 'failed'
+  last_run_at: string | null
+  summary: Record<string, unknown> | null
+}
+
+export interface EscalationDraft {
+  configured: boolean
+  source: 'template' | 'ai'
+  message: string
+  error: string | null
+}
+
+export interface EscalationStatus {
+  status: 'idle' | 'running' | 'complete' | 'failed'
+  submission_id: string | null
   last_run_at: string | null
   summary: Record<string, unknown> | null
 }
