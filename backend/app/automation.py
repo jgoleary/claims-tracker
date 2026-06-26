@@ -187,14 +187,14 @@ def run_escalation(
             "IH_MESSAGE": message,
         }
         try:
-            # Long timeout: the headful window stays open while the user reviews
-            # the filled form and submits it.
+            # Long timeout: the headful window stays open while the user logs in
+            # (if the session expired) and reviews/submits the filled form.
             result = subprocess.run(
                 [sys.executable, str(_ESC_SCRIPT)],
                 cwd=str(_ESC_SCRIPT.parent.parent),
                 capture_output=True,
                 text=True,
-                timeout=600,
+                timeout=1_800,
                 env=env,
             )
             summary = {
@@ -204,7 +204,7 @@ def run_escalation(
             }
             status = "complete" if result.returncode == 0 else "failed"
         except subprocess.TimeoutExpired:
-            summary = {"error": "timed out after 600s"}
+            summary = {"error": "timed out after 1800s"}
             status = "failed"
         except Exception as e:
             summary = {"error": str(e)}

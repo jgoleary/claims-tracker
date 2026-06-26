@@ -5,6 +5,7 @@ this never types a password: it opens the claims-support page in a headful
 browser and — if no valid session exists — waits for the user to complete login
 manually. The session persists in its own profile dir, so later runs skip login
 until it expires (mirrors the Anthem MFA approach in auth.py)."""
+import time
 from pathlib import Path
 
 from playwright.sync_api import BrowserContext, Page, Playwright
@@ -26,27 +27,49 @@ def launch_context(pw: Playwright) -> BrowserContext:
     )
 
 
-def _is_logged_in(page: Page) -> bool:
-    url = page.url.lower()
-    return "member.includedhealth.com" in url and "login" not in url
+def _on_member(url: str) -> bool:
+    """True only for a genuine member.includedhealth.com page — NOT the login
+    page, whose URL embeds member.includedhealth.com in its redirect_uri param."""
+    u = (url or "").lower()
+    return "member.includedhealth.com" in u and "login.includedhealth.com" not in u
 
 
-def login(page: Page, timeout: int = 180_000) -> None:
-    """Open the claims-support page; if not authenticated, wait for the user to
-    complete Google/IH login in the browser, then land back on claims-support."""
+def _form_ready(page: Page) -> bool:
+    """True once the claims-support form has rendered. We key off the form's first
+    option rather than the URL: an expired session briefly shows the member shell
+    URL before the SPA redirects to login, so a URL snapshot gives false positives."""
+    try:
+        return page.get_by_text("Out-of-network charges", exact=False).count() > 0
+    except Exception:
+        return False
+
+
+def login(page: Page, timeout_ms: int = 600_000, poll_ms: int = 1_500,
+          clock=time.monotonic) -> None:
+    """Open the claims-support page and wait until its form is actually present.
+
+    Does NOT decide "logged in" from the URL — it polls for the form. If the
+    session has expired the user sees the login screen and can sign in (Google /
+    Apple / email) in the open browser window; once they land back on a member
+    page we re-open the form. Raises if the form never appears within timeout_ms."""
     print("Opening Included Health claims support…")
-    page.goto(CLAIMS_SUPPORT_URL, wait_until="load", timeout=60_000)
+    page.goto(CLAIMS_SUPPORT_URL, wait_until="domcontentloaded", timeout=60_000)
+    print("If a login screen appears, sign in (Google / Apple / email) in the browser window…")
 
-    if _is_logged_in(page):
-        print("Session still active — skipping login.")
-        return
-
-    print("Complete login in the browser window (Google sign-in / MFA if prompted)…")
-    page.wait_for_url(lambda url: "member.includedhealth.com" in url.lower(), timeout=timeout)
-
-    # After login IH may land on the home page — return to claims-support.
-    if "claims-support" not in page.url:
-        page.goto(CLAIMS_SUPPORT_URL, wait_until="load", timeout=60_000)
-
-    page.wait_for_load_state("domcontentloaded", timeout=15_000)
-    print("Logged in.")
+    deadline = clock() + timeout_ms / 1000
+    while True:
+        if _form_ready(page):
+            print("Claims-support form ready.")
+            return
+        # Logged in but bounced to the member home page — go back to the form.
+        if _on_member(page.url) and "/claims-support" not in page.url.lower():
+            try:
+                page.goto(CLAIMS_SUPPORT_URL, wait_until="domcontentloaded", timeout=60_000)
+            except Exception:
+                pass
+        if clock() >= deadline:
+            raise RuntimeError(
+                "Timed out waiting for the Included Health claims-support form. "
+                "Was login completed in the browser window?"
+            )
+        page.wait_for_timeout(poll_ms)
