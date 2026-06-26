@@ -205,10 +205,7 @@ class AutomationStatus(BaseModel):
 # ── Escalation (Included Health) ─────────────────────────────────────────────
 
 class EscalationDraft(BaseModel):
-    configured: bool          # whether an Anthropic key was available for AI refinement
-    source: Literal["template", "ai"]
-    message: str              # always populated, even with no key
-    error: Optional[str] = None
+    message: str              # ready-to-send, built from a fixed per-flag template
 
 
 class EscalationRun(BaseModel):

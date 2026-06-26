@@ -1,17 +1,24 @@
 from unittest.mock import patch
 
 
-def test_escalate_draft_returns_message(client, make_submission, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.setattr("app.escalation.credentials.get_anthropic_key", lambda: None)
+def test_escalate_draft_returns_message(client, make_submission):
     sub = make_submission()
     resp = client.post(f"/api/submissions/{sub.id}/escalate/draft")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["source"] == "template"
-    assert body["configured"] is False
     assert body["message"].strip()
     assert sub.provider_name in body["message"]
+
+
+def test_escalate_draft_includes_claim_number_when_matched(client, db, make_submission, make_claim):
+    sub = make_submission()
+    claim = make_claim(claim_number="CLM-XYZ")
+    from app.models import Match
+    db.add(Match(submission_id=sub.id, anthem_claim_number=claim.claim_number, match_type="manual"))
+    db.commit()
+    resp = client.post(f"/api/submissions/{sub.id}/escalate/draft")
+    assert resp.status_code == 200
+    assert "CLM-XYZ" in resp.json()["message"]
 
 
 def test_escalate_draft_404(client):

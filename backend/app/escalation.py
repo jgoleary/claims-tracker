@@ -1,22 +1,67 @@
 """Build an Included Health escalation message for a submission.
 
-The message is built template-first so escalation works with **no Anthropic key**:
-`build_template_message` is a pure function that plugs claim-specific values into
-per-flag sentences. When a key is configured, `generate_escalation_message`
-refines that draft with Claude; on any failure it falls back to the template.
+No runtime LLM call: the wording barely changes between escalations, so instead
+of asking Claude every time we keep one fixed, Claude-authored template per
+escalation type (selected by the submission's dominant flag) and plug in the
+claim-specific values. Always returns a non-empty, ready-to-send paragraph.
 """
-import os
 from datetime import date
 from typing import Optional
 
-import anthropic
-
-from app import credentials
 from app.alerts import Alert
-from app.schemas import EscalationDraft
 
-_MODEL = "claude-sonnet-4-6"
-_MAX_TOKENS = 512
+# One template per escalation type. Placeholders: {provider}, {service_date},
+# {claim_ref}, {submitted} (common to all); plus flag-specific {days_pending},
+# {days_waiting}, {plan_paid}, {expected}, {diff}. {submitted} expands to
+# " I submitted this claim on <date>." (or "" when the claim was never submitted).
+_GENERIC = (
+    "I'm following up on an out-of-network claim for {provider} (date of service "
+    "{service_date}{claim_ref}).{submitted} I would appreciate your help getting it "
+    "fully processed and resolved. Please let me know if you need any additional "
+    "information from me."
+)
+
+_TEMPLATES = {
+    "DENIED": (
+        "I'm contesting the denial of an out-of-network claim for {provider} (date "
+        "of service {service_date}{claim_ref}).{submitted} I believe this claim "
+        "should be covered under my out-of-network benefits, and I'd like help "
+        "understanding the reason for the denial and getting it reviewed. Please let "
+        "me know what additional information would support an appeal."
+    ),
+    "VANISHED": (
+        "I'm following up on an out-of-network claim for {provider} (date of service "
+        "{service_date}{claim_ref}).{submitted} This claim previously appeared in my "
+        "Anthem account but has since disappeared from my claims, and I'm concerned "
+        "it may have been dropped. Could you help confirm its status and make sure "
+        "it's still being processed? I'm happy to provide any documentation you need."
+    ),
+    "MISSING": (
+        "I'm following up on an out-of-network claim for {provider} (date of service "
+        "{service_date}{claim_ref}).{submitted} That was {days_waiting} days ago, and "
+        "it still hasn't appeared in my claims. Could you help confirm it was received "
+        "and make sure it gets processed? I'm happy to resend any documentation you "
+        "need."
+    ),
+    "STALE_PENDING": (
+        "I'm following up on an out-of-network claim for {provider} (date of service "
+        "{service_date}{claim_ref}).{submitted} It has now been pending for "
+        "{days_pending} days without a resolution. I'd appreciate your help finding "
+        "out why it's delayed and getting it processed. Please let me know if you "
+        "need anything further from me."
+    ),
+    "UNDERPAID": (
+        "I'm following up on an out-of-network claim for {provider} (date of service "
+        "{service_date}{claim_ref}).{submitted} The claim was approved but reimbursed "
+        "{plan_paid} versus the {expected} I expected — a shortfall of {diff}. I'd "
+        "appreciate your help reviewing how it was processed and correcting the "
+        "reimbursement if it was underpaid. Please let me know if you need anything "
+        "further."
+    ),
+}
+
+# Which template wins when a submission carries several flags (most actionable first).
+_PRIORITY = ["DENIED", "VANISHED", "MISSING", "STALE_PENDING", "UNDERPAID"]
 
 
 def _dollars(cents: int) -> str:
@@ -29,103 +74,27 @@ def _long_date(d: Optional[date]) -> Optional[str]:
     return f"{d:%B} {d.day}, {d.year}"
 
 
-def build_template_message(submission, flags: list[Alert]) -> str:
-    """Compose a first-person escalation paragraph from the submission's flags.
+def build_escalation_message(submission, flags: list[Alert],
+                             claim_number: str | None = None) -> str:
+    """Select the template for the submission's dominant flag and fill it in.
 
-    Pure: no I/O. Opens with provider + service date, adds one sentence per
-    actionable flag with claim-specific values plugged in, closes with a request
-    for help. Always returns a non-empty string.
+    Pure (no I/O) and never raises — a non-empty paragraph is always returned.
     """
-    provider = submission.provider_name
-    svc = _long_date(submission.service_date)
     by_flag = {f.flag: f for f in flags}
+    chosen = next((f for f in _PRIORITY if f in by_flag), None)
+    template = _TEMPLATES.get(chosen, _GENERIC)
 
-    sentences = [
-        f"I'm writing to follow up on an out-of-network claim for {provider} "
-        f"with a date of service of {svc}."
-    ]
-
-    if "STALE_PENDING" in by_flag:
-        days = by_flag["STALE_PENDING"].details.get("days_pending")
-        submitted = _long_date(submission.submitted_date) or "the date I submitted it"
-        sentences.append(
-            f"I submitted this claim on {submitted} and it has been pending for "
-            f"{days} days without resolution."
-        )
-
-    if "MISSING" in by_flag:
-        days = by_flag["MISSING"].details.get("days_waiting")
-        submitted = _long_date(submission.submitted_date) or "some time ago"
-        sentences.append(
-            f"I submitted this claim on {submitted} ({days} days ago) but it still "
-            f"has not appeared in my claims."
-        )
-
-    if "DENIED" in by_flag:
-        sentences.append("This claim was denied and I would like it reviewed.")
-
-    if "UNDERPAID" in by_flag:
-        d = by_flag["UNDERPAID"].details
-        sentences.append(
-            f"This claim was approved but reimbursed {_dollars(d.get('plan_paid_cents', 0))} "
-            f"versus the {_dollars(d.get('expected_cents', 0))} I expected — a shortfall of "
-            f"{_dollars(d.get('diff_cents', 0))}."
-        )
-
-    if "VANISHED" in by_flag:
-        sentences.append(
-            "This claim previously appeared in my Anthem account and has since "
-            "disappeared from my claims."
-        )
-
-    # No flag produced a specific sentence — keep the message actionable.
-    if len(sentences) == 1:
-        sentences.append(
-            "I need help resolving this claim and would appreciate your assistance."
-        )
-
-    sentences.append("Could you please help me get this resolved? Thank you.")
-    return " ".join(sentences)
-
-
-def _ai_prompt(template: str, flags: list[Alert]) -> str:
-    flag_list = ", ".join(f.flag for f in flags) or "none"
-    return (
-        "You are helping a patient escalate a health-insurance claim to a member-support "
-        "advocate (Included Health). Rewrite the draft below into one polite, concise, "
-        "first-person paragraph (under 2000 characters) that explains the situation and "
-        "asks for help. Keep every specific fact (dates, dollar amounts, provider name). "
-        "Return only the message text, with no preamble or sign-off line.\n\n"
-        f"Flags: {flag_list}\n"
-        f"Draft: {template}"
-    )
-
-
-def generate_escalation_message(submission, flags: list[Alert]) -> EscalationDraft:
-    """Return an escalation message — template-based, AI-refined when a key is set.
-
-    Never raises. A non-empty `message` is always returned: the template when no
-    key is configured or the AI call fails, the AI text otherwise.
-    """
-    template = build_template_message(submission, flags)
-
-    key = credentials.get_anthropic_key() or os.environ.get("ANTHROPIC_API_KEY")
-    if not key:
-        return EscalationDraft(configured=False, source="template", message=template)
-
-    try:
-        client = anthropic.Anthropic(api_key=key)
-        message = client.messages.create(
-            model=_MODEL,
-            max_tokens=_MAX_TOKENS,
-            messages=[{"role": "user", "content": _ai_prompt(template, flags)}],
-        )
-        text = next(
-            (b.text for b in message.content if getattr(b, "type", None) == "text"), ""
-        ).strip()
-        if not text:
-            raise ValueError("empty response from Claude")
-    except Exception as e:  # noqa: BLE001 — fall back to the template
-        return EscalationDraft(configured=True, source="template", error=str(e), message=template)
-
-    return EscalationDraft(configured=True, source="ai", message=text)
+    details = by_flag[chosen].details if chosen else {}
+    submitted = _long_date(submission.submitted_date)
+    values = {
+        "provider": submission.provider_name,
+        "service_date": _long_date(submission.service_date),
+        "claim_ref": f"; Anthem claim #{claim_number}" if claim_number else "",
+        "submitted": f" I submitted this claim on {submitted}." if submitted else "",
+        "days_pending": details.get("days_pending", ""),
+        "days_waiting": details.get("days_waiting", ""),
+        "plan_paid": _dollars(details.get("plan_paid_cents", 0)),
+        "expected": _dollars(details.get("expected_cents", 0)),
+        "diff": _dollars(details.get("diff_cents", 0)),
+    }
+    return template.format(**values)

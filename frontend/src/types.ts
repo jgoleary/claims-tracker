@@ -133,10 +133,7 @@ export interface AutomationStatus {
 }
 
 export interface EscalationDraft {
-  configured: boolean
-  source: 'template' | 'ai'
   message: string
-  error: string | null
 }
 
 export interface EscalationStatus {

@@ -23,8 +23,9 @@ from playwright.sync_api import Page, sync_playwright
 import ih_auth
 
 # Leave the window open this long for the user to review/submit (or recover from
-# an error). Kept below the backend subprocess timeout so we exit cleanly.
-_REVIEW_TIMEOUT_MS = 900_000
+# an error). Kept (with the login wait) below the 10-min backend subprocess
+# timeout so we exit cleanly rather than being killed mid-review.
+_REVIEW_TIMEOUT_MS = 240_000
 
 # Fixed answer for the "What is your desired outcome for this process?" field.
 _DESIRED_OUTCOME = "accurate processing of my claim"
@@ -59,6 +60,31 @@ def _click_text(page: Page, texts: list[str], name: str) -> None:
         f"Texts tried: {texts}\n"
         f"Update ih_escalate.py if Included Health changed their form."
     )
+
+
+def _click_button(page: Page, names: list[str], what: str) -> None:
+    """Click a wizard button (Next / Continue / Upload). Prefers the button role,
+    falling back to text so it tolerates minor markup differences."""
+    for n in names:
+        try:
+            page.get_by_role("button", name=n, exact=False).first.click(timeout=8_000)
+            return
+        except Exception:
+            continue
+    _click_text(page, names, what)
+
+
+def _upload_document(page: Page, pdf_path: str) -> None:
+    """Attach the PDF on the 'Submit supporting documents' page. Sets the hidden
+    file input directly (no native dialog); falls back to the file chooser."""
+    try:
+        page.locator('input[type="file"]').first.set_input_files(pdf_path, timeout=10_000)
+        return
+    except Exception:
+        pass
+    with page.expect_file_chooser(timeout=15_000) as fc:
+        _click_button(page, ["Upload Document", "Upload"], "the Upload Document button")
+    fc.value.set_files(pdf_path)
 
 
 def _fill_first(page: Page, selectors: list[str], value: str, name: str) -> None:
@@ -111,7 +137,8 @@ def _click_member(page: Page, member: str) -> None:
     )
 
 
-def fill_form(page: Page, member: str, provider: str, service_date: str, message: str) -> None:
+def fill_form(page: Page, member: str, provider: str, service_date: str,
+              message: str, pdf_path: str = "") -> None:
     # 1. "What can we help you with?" → Out-of-network charges
     _click_text(page, ["Out-of-network charges"], "the 'Out-of-network charges' option")
 
@@ -127,6 +154,14 @@ def fill_form(page: Page, member: str, provider: str, service_date: str, message
     _fill_by_question(page, "Why are you contesting", message, "the contesting-reason message")
     _fill_by_question(page, "desired outcome", _DESIRED_OUTCOME, "the desired-outcome field")
 
+    # 4. "Submit supporting documents" → upload the submission's PDF (if any)
+    if pdf_path and os.path.exists(pdf_path):
+        _click_button(page, ["Next", "Continue"], "the Next button")
+        _upload_document(page, pdf_path)
+        print("Uploaded supporting document.")
+    elif pdf_path:
+        print(f"PDF not found at {pdf_path}; skipping document upload.")
+
     # Stop before Submit — the user reviews and submits in the browser.
     print(
         "Form filled — review and click Submit in the browser window. "
@@ -140,6 +175,7 @@ def main() -> int:
     provider = os.environ.get("IH_PROVIDER", "")
     service_date = os.environ.get("IH_SERVICE_DATE", "")
     message = os.environ.get("IH_MESSAGE", "")
+    pdf_path = os.environ.get("IH_PDF_PATH", "")
 
     errors: list[str] = []
     with sync_playwright() as pw:
@@ -152,7 +188,7 @@ def main() -> int:
             errors.append(f"auth: {e}")
         else:
             try:
-                fill_form(page, member, provider, service_date, message)
+                fill_form(page, member, provider, service_date, message, pdf_path)
             except Exception as e:
                 print(f"[form] ERROR: {e}")
                 errors.append(f"form: {e}")

@@ -44,7 +44,7 @@ def _form_ready(page: Page) -> bool:
         return False
 
 
-def login(page: Page, timeout_ms: int = 600_000, poll_ms: int = 1_500,
+def login(page: Page, timeout_ms: int = 300_000, poll_ms: int = 1_500,
           clock=time.monotonic) -> None:
     """Open the claims-support page and wait until its form is actually present.
 
