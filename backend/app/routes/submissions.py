@@ -40,6 +40,7 @@ def _to_response(submission: Submission, latest_ingest: Optional[datetime] = Non
         submission_method=submission.submission_method,
         pdf_path=submission.pdf_path,
         notes=submission.notes,
+        escalated_at=submission.escalated_at,
         created_at=submission.created_at,
         updated_at=submission.updated_at,
         anthem_claim_number=match.anthem_claim_number if match else None,

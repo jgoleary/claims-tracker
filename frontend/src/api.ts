@@ -1,7 +1,7 @@
 import type {
   AnthemClaimResponse, AnthropicKeyStatus, AutomationStatus, DashboardResponse,
-  ExtractionResult, IngestSummary, MatchSuggestion, PlanConfig,
-  ProviderAliasResponse, SubmissionCreate, SubmissionResponse, TotalsResponse,
+  EscalationDraft, EscalationStatus, ExtractionResult, IngestSummary, MatchSuggestion,
+  PlanConfig, ProviderAliasResponse, SubmissionCreate, SubmissionResponse, TotalsResponse,
 } from './types'
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
@@ -91,6 +91,21 @@ export const api = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       }),
+  },
+  escalations: {
+    draft: (id: string) =>
+      req<EscalationDraft>(`/submissions/${id}/escalate/draft`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      }),
+    run: (id: string, message: string) =>
+      req<{ detail: string }>(`/submissions/${id}/escalate/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message }),
+      }),
+    status: () => req<EscalationStatus>('/escalations/status'),
   },
   providers: {
     aliases: () => req<ProviderAliasResponse[]>('/providers/aliases'),

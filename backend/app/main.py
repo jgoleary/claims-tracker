@@ -9,6 +9,7 @@ from app.routes import (
     anthem_claims,
     automation,
     dashboard,
+    escalations,
     ingest,
     matches,
     providers,
@@ -34,6 +35,7 @@ app.include_router(ingest.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(totals.router, prefix="/api")
 app.include_router(automation.router, prefix="/api")
+app.include_router(escalations.router, prefix="/api")
 app.include_router(providers.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
 
