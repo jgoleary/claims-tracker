@@ -23,6 +23,7 @@ export default function Dashboard() {
     { flag: 'MISSING', label: 'Missing', count: counts.missing, color: 'bg-red-100 text-red-700 border-red-200' },
     { flag: 'VANISHED', label: 'Vanished', count: counts.vanished, color: 'bg-red-100 text-red-700 border-red-200' },
     { flag: 'DENIED', label: 'Denied', count: counts.denied, color: 'bg-red-100 text-red-700 border-red-200' },
+    { flag: 'DELETED', label: 'Deleted', count: counts.deleted, color: 'bg-red-100 text-red-700 border-red-200' },
     { flag: 'STALE_PENDING', label: 'Stale Pending', count: counts.stale_pending, color: 'bg-amber-100 text-amber-700 border-amber-200' },
     { flag: 'UNDERPAID', label: 'Underpaid', count: counts.underpaid, color: 'bg-amber-100 text-amber-700 border-amber-200' },
     { flag: 'OVERPAID', label: 'Overpaid', count: counts.overpaid, color: 'bg-blue-100 text-blue-700 border-blue-200' },

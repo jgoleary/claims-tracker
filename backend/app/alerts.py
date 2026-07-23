@@ -28,6 +28,11 @@ def compute_flags(submission, match=None, latest_ingest_at: Optional[datetime] =
     alerts: list[Alert] = []
     today = date.today()
 
+    # A superseded (deprecated) submission has been followed up by another submission;
+    # it is no longer "interesting" and raises no flags anywhere compute_flags is used.
+    if getattr(submission, "superseded_by_id", None):
+        return alerts
+
     if match is None:
         if submission.submitted_date is None:
             alerts.append(Alert("UNSUBMITTED", "info", {}))
@@ -58,6 +63,9 @@ def compute_flags(submission, match=None, latest_ingest_at: Optional[datetime] =
 
     if claim.status == "Denied":
         alerts.append(Alert("DENIED", "red", {}))
+
+    if claim.status == "Deleted":
+        alerts.append(Alert("DELETED", "red", {}))
 
     if claim.status == "Approved":
         expected = submission.expected_reimbursement

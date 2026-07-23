@@ -28,6 +28,8 @@ export default function AnthemClaimDetail() {
     ? 'bg-green-100 text-green-700'
     : claim.status === 'Denied'
     ? 'bg-red-100 text-red-700'
+    : claim.status === 'Deleted'
+    ? 'bg-gray-200 text-gray-600'
     : 'bg-amber-100 text-amber-700'
 
   return (

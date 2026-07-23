@@ -21,7 +21,7 @@ def get_suggestions(db: Session = Depends(get_db)):
     unmatched_subs = db.scalars(
         select(Submission)
         .where(~exists().where(Match.submission_id == Submission.id))
-        .options(_load_options())
+        .options(*_load_options())
     ).all()
 
     unmatched_claims = db.scalars(

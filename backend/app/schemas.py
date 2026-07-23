@@ -36,6 +36,20 @@ class AlertOut(BaseModel):
     details: dict[str, Any] = {}
 
 
+class SubmissionRef(BaseModel):
+    """Lightweight reference to another submission, used for supersede links."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    provider_name: str
+    service_date: date
+    submitted_date: Optional[date] = None
+
+
+class SupersedeRequest(BaseModel):
+    superseded_by_id: str
+
+
 class SubmissionResponse(BaseModel):
     id: str
     member_name: str
@@ -54,6 +68,8 @@ class SubmissionResponse(BaseModel):
     anthem_claim_number: Optional[str] = None
     anthem_claim_status: Optional[str] = None
     anthem_plan_paid: Optional[int] = None
+    superseded_by: Optional[SubmissionRef] = None
+    supersedes: list[SubmissionRef] = []
     flags: list[AlertOut] = []
 
 
@@ -136,6 +152,7 @@ class DashboardCounts(BaseModel):
     missing: int = 0
     stale_pending: int = 0
     denied: int = 0
+    deleted: int = 0
     underpaid: int = 0
     overpaid: int = 0
     unsubmitted: int = 0

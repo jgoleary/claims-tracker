@@ -1,5 +1,17 @@
+import type { SubmissionResponse } from './types'
+
 export function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`
+}
+
+/** A submission is "interesting" (worth reviewing) unless it's settled —
+ *  i.e. matched to an Approved Anthem claim with no flags — or it has been
+ *  deprecated (superseded by a follow-up submission). */
+export function isInterestingSubmission(
+  s: Pick<SubmissionResponse, 'anthem_claim_status' | 'flags' | 'superseded_by'>,
+): boolean {
+  if (s.superseded_by) return false
+  return s.anthem_claim_status !== 'Approved' || s.flags.length > 0
 }
 
 /** Mask a personal name for demos. When `redact`, each whitespace-separated token
@@ -46,6 +58,7 @@ export const FLAG_LABELS: Record<string, string> = {
   MISSING: 'Missing',
   STALE_PENDING: 'Stale Pending',
   DENIED: 'Denied',
+  DELETED: 'Deleted',
   UNDERPAID: 'Underpaid',
   OVERPAID: 'Overpaid',
   UNSUBMITTED: 'Unsubmitted',

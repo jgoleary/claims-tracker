@@ -31,6 +31,9 @@ def _migrate(eng=engine) -> None:
         if "escalated_at" not in cols:
             with eng.begin() as conn:
                 conn.execute(text("ALTER TABLE submissions ADD COLUMN escalated_at DATETIME"))
+        if "superseded_by_id" not in cols:
+            with eng.begin() as conn:
+                conn.execute(text("ALTER TABLE submissions ADD COLUMN superseded_by_id VARCHAR"))
 
 
 def init_db() -> None:

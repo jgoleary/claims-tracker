@@ -23,7 +23,7 @@ def get_dashboard(year: Optional[int] = None, db: Session = Depends(get_db)):
     submissions = db.scalars(
         select(Submission)
         .where(Submission.service_date >= start, Submission.service_date <= end)
-        .options(_load_options())
+        .options(*_load_options())
     ).all()
 
     counts = DashboardCounts()
@@ -45,6 +45,8 @@ def get_dashboard(year: Optional[int] = None, db: Session = Depends(get_db)):
                 counts.stale_pending += 1
             elif flag.flag == "DENIED":
                 counts.denied += 1
+            elif flag.flag == "DELETED":
+                counts.deleted += 1
             elif flag.flag == "UNDERPAID":
                 counts.underpaid += 1
             elif flag.flag == "OVERPAID":

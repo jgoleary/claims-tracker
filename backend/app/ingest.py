@@ -56,9 +56,9 @@ def _parse_patient_name(s: str) -> str:
 
 
 def _normalize_status(s: str) -> str:
-    """Normalize Anthem status to Pending/Approved/Denied."""
+    """Normalize Anthem status to Pending/Approved/Denied/Deleted."""
     normalized = s.strip().capitalize()
-    if normalized not in ('Pending', 'Approved', 'Denied'):
+    if normalized not in ('Pending', 'Approved', 'Denied', 'Deleted'):
         raise ValueError(f"Unknown claim status: {s!r}")
     return normalized
 

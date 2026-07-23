@@ -107,6 +107,77 @@ def test_create_submission_without_submitted_date(client):
     assert resp.json()["submitted_date"] is None
 
 
+def _make_old_and_new(client: TestClient):
+    """Create an old submission overdue enough to flag MISSING, plus a follow-up."""
+    from datetime import timedelta
+    from app import config
+    old_date = (date.today() - timedelta(days=config.MISSING_DAYS + 1)).isoformat()
+    old = client.post(BASE, json={
+        **SUBMISSION_BODY, "service_date": old_date, "submitted_date": old_date,
+    }).json()
+    new = client.post(BASE, json={**SUBMISSION_BODY, "member_name": "James OLeary"}).json()
+    return old, new
+
+
+def test_supersede_sets_pointer_and_clears_flags(client: TestClient):
+    old, new = _make_old_and_new(client)
+    assert any(f["flag"] == "MISSING" for f in old["flags"])  # sanity: it was interesting
+
+    resp = client.post(f"{BASE}/{old['id']}/supersede", json={"superseded_by_id": new["id"]})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["flags"] == []
+    assert data["superseded_by"]["id"] == new["id"]
+    assert data["superseded_by"]["provider_name"] == new["provider_name"]
+
+    # Reverse link shows on the successor.
+    successor = client.get(f"{BASE}/{new['id']}").json()
+    assert [s["id"] for s in successor["supersedes"]] == [old["id"]]
+
+
+def test_superseded_submission_absent_from_dashboard(client: TestClient):
+    old, new = _make_old_and_new(client)
+    before = client.get("/api/dashboard").json()
+    assert any(a["submission_id"] == old["id"] for a in before["alerts"])
+
+    client.post(f"{BASE}/{old['id']}/supersede", json={"superseded_by_id": new["id"]})
+    after = client.get("/api/dashboard").json()
+    assert not any(a["submission_id"] == old["id"] for a in after["alerts"])
+
+
+def test_unsupersede_restores(client: TestClient):
+    old, new = _make_old_and_new(client)
+    client.post(f"{BASE}/{old['id']}/supersede", json={"superseded_by_id": new["id"]})
+
+    resp = client.delete(f"{BASE}/{old['id']}/supersede")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["superseded_by"] is None
+    assert any(f["flag"] == "MISSING" for f in data["flags"])
+
+
+def test_supersede_self_rejected(client: TestClient):
+    created = client.post(BASE, json=SUBMISSION_BODY).json()
+    resp = client.post(f"{BASE}/{created['id']}/supersede", json={"superseded_by_id": created["id"]})
+    assert resp.status_code == 400
+
+
+def test_supersede_unknown_successor_404(client: TestClient):
+    created = client.post(BASE, json=SUBMISSION_BODY).json()
+    resp = client.post(f"{BASE}/{created['id']}/supersede", json={"superseded_by_id": str(uuid.uuid4())})
+    assert resp.status_code == 404
+
+
+def test_deleting_successor_clears_pointer(client: TestClient):
+    old, new = _make_old_and_new(client)
+    client.post(f"{BASE}/{old['id']}/supersede", json={"superseded_by_id": new["id"]})
+
+    assert client.delete(f"{BASE}/{new['id']}").status_code == 204
+    old_after = client.get(f"{BASE}/{old['id']}").json()
+    assert old_after["superseded_by"] is None
+    assert any(f["flag"] == "MISSING" for f in old_after["flags"])  # interesting again
+
+
 def test_extract_returns_not_configured_without_key(client, monkeypatch):
     # The key resolves Keychain -> env var, so neutralize both. Without the
     # Keychain stub this test fails on any machine that has a real key stored.

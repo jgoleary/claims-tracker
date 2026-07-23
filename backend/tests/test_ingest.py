@@ -76,6 +76,9 @@ class TestNormalizeStatus:
     def test_uppercase_denied(self):
         assert _normalize_status("DENIED") == "Denied"
 
+    def test_deleted(self):
+        assert _normalize_status("Deleted") == "Deleted"
+
     def test_unknown_raises(self):
         with pytest.raises(ValueError, match="Unknown claim status"):
             _normalize_status("Cancelled")
