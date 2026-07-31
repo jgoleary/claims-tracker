@@ -34,10 +34,21 @@ class Submission(Base):
     pdf_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     escalated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    superseded_by_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("submissions.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
     match: Mapped[Optional["Match"]] = relationship("Match", back_populates="submission", uselist=False)
+    # Self-referential: the submission that replaces this one. `supersedes` (backref)
+    # is the reverse — the submissions this one replaces.
+    superseded_by: Mapped[Optional["Submission"]] = relationship(
+        "Submission",
+        remote_side=[id],
+        foreign_keys=[superseded_by_id],
+        backref="supersedes",
+    )
 
 
 class AnthemClaim(Base):
@@ -50,7 +61,7 @@ class AnthemClaim(Base):
     received_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     processed_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(
-        SAEnum("Pending", "Approved", "Denied", name="claim_status"),
+        SAEnum("Pending", "Approved", "Denied", "Deleted", name="claim_status"),
         nullable=False,
     )
     provider_name: Mapped[str] = mapped_column(String, nullable=False)

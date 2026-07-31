@@ -29,7 +29,7 @@ def test_uses_keychain_key_when_present(monkeypatch):
         captured["api_key"] = kwargs.get("api_key")
         msg = MagicMock()
         msg.content = [MagicMock(type="text", text=json.dumps({
-            "member_name": "Nolan OLeary", "provider_name": "Citrus Speech",
+            "member_name": "Jordan Rivera", "provider_name": "Bluebird Speech",
             "first_service_date": "2026-05-06", "amount_billed": "$570.00",
         }))]
         client = MagicMock()
@@ -68,8 +68,8 @@ def test_success_maps_fields(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setattr(extraction.credentials, "get_anthropic_key", lambda: None)
     client = _fake_client({
-        "member_name": "Nolan OLeary",
-        "provider_name": "Citrus Speech",
+        "member_name": "Jordan Rivera",
+        "provider_name": "Bluebird Speech",
         "first_service_date": "2026-05-06",
         "amount_billed": "$570.00",
     })
@@ -77,8 +77,8 @@ def test_success_maps_fields(monkeypatch):
     result = extraction.extract_submission_fields(b"%PDF-1.4 fake")
     assert result.configured is True
     assert result.error is None
-    assert result.member_name == "Nolan OLeary"
-    assert result.provider_name == "Citrus Speech"
+    assert result.member_name == "Jordan Rivera"
+    assert result.provider_name == "Bluebird Speech"
     assert result.first_service_date == date(2026, 5, 6)
     assert result.amount_billed_cents == 57000
 
@@ -104,8 +104,8 @@ def test_malformed_values_degrade_to_none(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setattr(extraction.credentials, "get_anthropic_key", lambda: None)
     client = _fake_client({
-        "member_name": "Nolan OLeary",
-        "provider_name": "Citrus Speech",
+        "member_name": "Jordan Rivera",
+        "provider_name": "Bluebird Speech",
         "first_service_date": "not-a-date",
         "amount_billed": "free of charge",
     })
@@ -115,7 +115,7 @@ def test_malformed_values_degrade_to_none(monkeypatch):
     assert result.error is None
     assert result.first_service_date is None
     assert result.amount_billed_cents is None
-    assert result.member_name == "Nolan OLeary"
+    assert result.member_name == "Jordan Rivera"
 
 
 def test_api_error_is_captured(monkeypatch):

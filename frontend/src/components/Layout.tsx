@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api'
 import { useYear } from '../context/YearContext'
+import { isInterestingSubmission } from '../utils'
 
 const NAV = [
   { to: '/', label: 'Dashboard', end: true },
@@ -26,8 +27,15 @@ export default function Layout() {
   })
 
   const totalAlerts = dash
-    ? dash.counts.missing + dash.counts.denied + dash.counts.stale_pending + dash.counts.underpaid + dash.counts.vanished
+    ? dash.counts.missing + dash.counts.denied + dash.counts.deleted + dash.counts.stale_pending + dash.counts.underpaid + dash.counts.vanished
     : 0
+
+  const { data: subs } = useQuery({
+    queryKey: ['submissions', { year: String(year) }],
+    queryFn: () => api.submissions.list({ year: String(year) }),
+    refetchInterval: 60_000,
+  })
+  const interestingCount = (subs ?? []).filter(isInterestingSubmission).length
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -63,6 +71,11 @@ export default function Layout() {
               {label === 'Dashboard' && totalAlerts > 0 && (
                 <span className="bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5 leading-none">
                   {totalAlerts}
+                </span>
+              )}
+              {label === 'Submissions' && interestingCount > 0 && (
+                <span className="bg-slate-500 text-white text-xs rounded-full px-1.5 py-0.5 leading-none">
+                  {interestingCount}
                 </span>
               )}
             </NavLink>

@@ -4,6 +4,13 @@ export interface AlertOut {
   details: Record<string, unknown>
 }
 
+export interface SubmissionRef {
+  id: string
+  provider_name: string
+  service_date: string
+  submitted_date: string | null
+}
+
 export interface SubmissionResponse {
   id: string
   member_name: string
@@ -20,8 +27,10 @@ export interface SubmissionResponse {
   created_at: string
   updated_at: string
   anthem_claim_number: string | null
-  anthem_claim_status: 'Pending' | 'Approved' | 'Denied' | null
+  anthem_claim_status: 'Pending' | 'Approved' | 'Denied' | 'Deleted' | null
   anthem_plan_paid: number | null
+  superseded_by: SubmissionRef | null
+  supersedes: SubmissionRef[]
   flags: AlertOut[]
 }
 
@@ -44,7 +53,7 @@ export interface AnthemClaimResponse {
   service_date: string
   received_date: string | null
   processed_date: string | null
-  status: 'Pending' | 'Approved' | 'Denied'
+  status: 'Pending' | 'Approved' | 'Denied' | 'Deleted'
   provider_name: string
   billed: number
   plan_discount: number
@@ -77,6 +86,7 @@ export interface DashboardCounts {
   missing: number
   stale_pending: number
   denied: number
+  deleted: number
   underpaid: number
   overpaid: number
   unsubmitted: number

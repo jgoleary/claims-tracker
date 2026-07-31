@@ -34,6 +34,14 @@ export const api = {
         body: JSON.stringify(body),
       }),
     delete: (id: string) => req<void>(`/submissions/${id}`, { method: 'DELETE' }),
+    supersede: (id: string, supersededById: string) =>
+      req<SubmissionResponse>(`/submissions/${id}/supersede`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ superseded_by_id: supersededById }),
+      }),
+    unsupersede: (id: string) =>
+      req<SubmissionResponse>(`/submissions/${id}/supersede`, { method: 'DELETE' }),
     uploadPdf: (id: string, file: File) => {
       const fd = new FormData()
       fd.append('file', file)

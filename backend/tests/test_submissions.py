@@ -10,8 +10,8 @@ BASE = "/api/submissions"
 _TODAY = date.today().isoformat()
 
 SUBMISSION_BODY = {
-    "member_name": "James OLeary",
-    "provider_name": "Joyful Behavior Therapy",
+    "member_name": "Alex Carter",
+    "provider_name": "Sunrise Behavior Therapy",
     "service_date": _TODAY,
     "amount_billed": 240000,
     "expected_reimbursement": 180000,
@@ -25,14 +25,14 @@ def test_create_submission(client: TestClient):
     resp = client.post(BASE, json=SUBMISSION_BODY)
     assert resp.status_code == 201
     data = resp.json()
-    assert data["member_name"] == "James OLeary"
+    assert data["member_name"] == "Alex Carter"
     assert data["flags"] == []
     assert data["anthem_claim_number"] is None
 
 
 def test_list_submissions(client: TestClient):
     client.post(BASE, json=SUBMISSION_BODY)
-    client.post(BASE, json={**SUBMISSION_BODY, "member_name": "Nolan OLeary"})
+    client.post(BASE, json={**SUBMISSION_BODY, "member_name": "Jordan Rivera"})
     resp = client.get(BASE)
     assert resp.status_code == 200
     assert len(resp.json()) == 2
@@ -40,10 +40,10 @@ def test_list_submissions(client: TestClient):
 
 def test_list_filter_by_member(client: TestClient):
     client.post(BASE, json=SUBMISSION_BODY)
-    client.post(BASE, json={**SUBMISSION_BODY, "member_name": "Nolan OLeary"})
-    resp = client.get(BASE, params={"member": "Nolan"})
+    client.post(BASE, json={**SUBMISSION_BODY, "member_name": "Jordan Rivera"})
+    resp = client.get(BASE, params={"member": "Jordan"})
     assert len(resp.json()) == 1
-    assert resp.json()[0]["member_name"] == "Nolan OLeary"
+    assert resp.json()[0]["member_name"] == "Jordan Rivera"
 
 
 def test_get_submission(client: TestClient):
@@ -95,8 +95,8 @@ def test_download_pdf_not_found(client: TestClient):
 
 def test_create_submission_without_submitted_date(client):
     resp = client.post("/api/submissions", json={
-        "member_name": "James OLeary",
-        "provider_name": "Joyful Behavior Therapy",
+        "member_name": "Alex Carter",
+        "provider_name": "Sunrise Behavior Therapy",
         "service_date": "2026-05-06",
         "amount_billed": 57000,
         "expected_reimbursement": 25900,
@@ -105,6 +105,77 @@ def test_create_submission_without_submitted_date(client):
     })
     assert resp.status_code == 201
     assert resp.json()["submitted_date"] is None
+
+
+def _make_old_and_new(client: TestClient):
+    """Create an old submission overdue enough to flag MISSING, plus a follow-up."""
+    from datetime import timedelta
+    from app import config
+    old_date = (date.today() - timedelta(days=config.MISSING_DAYS + 1)).isoformat()
+    old = client.post(BASE, json={
+        **SUBMISSION_BODY, "service_date": old_date, "submitted_date": old_date,
+    }).json()
+    new = client.post(BASE, json={**SUBMISSION_BODY, "member_name": "Alex Carter"}).json()
+    return old, new
+
+
+def test_supersede_sets_pointer_and_clears_flags(client: TestClient):
+    old, new = _make_old_and_new(client)
+    assert any(f["flag"] == "MISSING" for f in old["flags"])  # sanity: it was interesting
+
+    resp = client.post(f"{BASE}/{old['id']}/supersede", json={"superseded_by_id": new["id"]})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["flags"] == []
+    assert data["superseded_by"]["id"] == new["id"]
+    assert data["superseded_by"]["provider_name"] == new["provider_name"]
+
+    # Reverse link shows on the successor.
+    successor = client.get(f"{BASE}/{new['id']}").json()
+    assert [s["id"] for s in successor["supersedes"]] == [old["id"]]
+
+
+def test_superseded_submission_absent_from_dashboard(client: TestClient):
+    old, new = _make_old_and_new(client)
+    before = client.get("/api/dashboard").json()
+    assert any(a["submission_id"] == old["id"] for a in before["alerts"])
+
+    client.post(f"{BASE}/{old['id']}/supersede", json={"superseded_by_id": new["id"]})
+    after = client.get("/api/dashboard").json()
+    assert not any(a["submission_id"] == old["id"] for a in after["alerts"])
+
+
+def test_unsupersede_restores(client: TestClient):
+    old, new = _make_old_and_new(client)
+    client.post(f"{BASE}/{old['id']}/supersede", json={"superseded_by_id": new["id"]})
+
+    resp = client.delete(f"{BASE}/{old['id']}/supersede")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["superseded_by"] is None
+    assert any(f["flag"] == "MISSING" for f in data["flags"])
+
+
+def test_supersede_self_rejected(client: TestClient):
+    created = client.post(BASE, json=SUBMISSION_BODY).json()
+    resp = client.post(f"{BASE}/{created['id']}/supersede", json={"superseded_by_id": created["id"]})
+    assert resp.status_code == 400
+
+
+def test_supersede_unknown_successor_404(client: TestClient):
+    created = client.post(BASE, json=SUBMISSION_BODY).json()
+    resp = client.post(f"{BASE}/{created['id']}/supersede", json={"superseded_by_id": str(uuid.uuid4())})
+    assert resp.status_code == 404
+
+
+def test_deleting_successor_clears_pointer(client: TestClient):
+    old, new = _make_old_and_new(client)
+    client.post(f"{BASE}/{old['id']}/supersede", json={"superseded_by_id": new["id"]})
+
+    assert client.delete(f"{BASE}/{new['id']}").status_code == 204
+    old_after = client.get(f"{BASE}/{old['id']}").json()
+    assert old_after["superseded_by"] is None
+    assert any(f["flag"] == "MISSING" for f in old_after["flags"])  # interesting again
 
 
 def test_extract_returns_not_configured_without_key(client, monkeypatch):

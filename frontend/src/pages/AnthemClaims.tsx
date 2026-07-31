@@ -13,6 +13,7 @@ export default function AnthemClaims() {
   const [filterMatched, setFilterMatched] = useState('all')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterPatient, setFilterPatient] = useState('')
+  const [filterProvider, setFilterProvider] = useState('')
   const params: Record<string, string> = { year: String(year) }
   if (filterMatched !== 'all') params.matched = filterMatched
   if (filterStatus) params.status = filterStatus
@@ -25,9 +26,13 @@ export default function AnthemClaims() {
   const patients = [...new Set((data ?? []).map((c) => c.patient_name).filter(Boolean))].sort(
     (a, b) => a.localeCompare(b)
   )
+  const providers = [...new Set((data ?? []).map((c) => c.provider_name).filter(Boolean))].sort(
+    (a, b) => a.localeCompare(b)
+  )
 
   const claims = [...(data ?? [])]
     .filter((c) => !filterPatient || c.patient_name === filterPatient)
+    .filter((c) => !filterProvider || c.provider_name === filterProvider)
     .sort((a, b) => (b.service_date ?? '').localeCompare(a.service_date ?? ''))
   const totalDeductible = claims.reduce((s, c) => s + c.deductible, 0)
   const totalCoinsurance = claims.reduce((s, c) => s + c.coinsurance, 0)
@@ -49,12 +54,20 @@ export default function AnthemClaims() {
           <option value="Pending">Pending</option>
           <option value="Approved">Approved</option>
           <option value="Denied">Denied</option>
+          <option value="Deleted">Deleted</option>
         </select>
         <select value={filterPatient} onChange={(e) => setFilterPatient(e.target.value)}
           className="border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
           <option value="">All Patients</option>
           {patients.map((p) => (
             <option key={p} value={p}>{maskName(p, redact)}</option>
+          ))}
+        </select>
+        <select value={filterProvider} onChange={(e) => setFilterProvider(e.target.value)}
+          className="border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="">All Providers</option>
+          {providers.map((p) => (
+            <option key={p} value={p}>{p}</option>
           ))}
         </select>
       </div>
@@ -77,7 +90,7 @@ export default function AnthemClaims() {
                   <td className="px-4 py-3 text-gray-700">{c.provider_name}</td>
                   <td className="px-4 py-3 text-gray-500">{formatDate(c.service_date)}</td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${c.status === 'Approved' ? 'bg-green-100 text-green-700' : c.status === 'Denied' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{c.status}</span>
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${c.status === 'Approved' ? 'bg-green-100 text-green-700' : c.status === 'Denied' ? 'bg-red-100 text-red-700' : c.status === 'Deleted' ? 'bg-gray-200 text-gray-600' : 'bg-amber-100 text-amber-700'}`}>{c.status}</span>
                   </td>
                   <td className="px-4 py-3">{formatCents(c.billed)}</td>
                   <td className="px-4 py-3">{formatCents(c.plan_paid)}</td>

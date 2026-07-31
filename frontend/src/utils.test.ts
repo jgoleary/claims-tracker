@@ -3,19 +3,19 @@ import { computeExpected, maskName } from './utils'
 
 describe('maskName', () => {
   it('returns the value unchanged when redact is off', () => {
-    expect(maskName("Nolan O'leary", false)).toBe("Nolan O'leary")
+    expect(maskName("Jordan Rivera", false)).toBe("Jordan Rivera")
   })
 
   it('masks each token when redact is on', () => {
-    expect(maskName("Nolan O'leary", true)).toBe('*** ***')
+    expect(maskName("Jordan Rivera", true)).toBe('*** ***')
   })
 
   it('masks a single-word name to one token', () => {
-    expect(maskName('Nolan', true)).toBe('***')
+    expect(maskName('Jordan', true)).toBe('***')
   })
 
   it('masks a three-word name to three tokens', () => {
-    expect(maskName('Joyful Behavior Therapy', true)).toBe('*** *** ***')
+    expect(maskName('Sunrise Behavior Therapy', true)).toBe('*** *** ***')
   })
 
   it('handles null/empty values', () => {

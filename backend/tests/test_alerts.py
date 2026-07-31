@@ -11,6 +11,7 @@ def _make_submission(submitted_date=None, expected_reimbursement=180_000, networ
     s.submitted_date = submitted_date or (date.today() - timedelta(days=5))
     s.expected_reimbursement = expected_reimbursement
     s.network_treatment = network_treatment
+    s.superseded_by_id = None
     return s
 
 
@@ -56,6 +57,24 @@ class TestComputeFlags:
         match = _make_match(status="Denied")
         flags = compute_flags(sub, match=match)
         assert any(f.flag == "DENIED" and f.severity == "red" for f in flags)
+
+    def test_deleted_flag(self):
+        sub = _make_submission()
+        match = _make_match(status="Deleted")
+        flags = compute_flags(sub, match=match)
+        assert any(f.flag == "DELETED" and f.severity == "red" for f in flags)
+
+    def test_superseded_submission_raises_no_flags(self):
+        # A deprecated submission is silent even when matched to a Deleted claim
+        # that would otherwise raise a red DELETED alert.
+        sub = _make_submission()
+        sub.superseded_by_id = "some-other-submission-id"
+        match = _make_match(status="Deleted")
+        assert compute_flags(sub, match=match) == []
+        # ...and also when unmatched and long overdue (would normally be MISSING).
+        overdue = _make_submission(submitted_date=date.today() - timedelta(days=config.MISSING_DAYS + 1))
+        overdue.superseded_by_id = "some-other-submission-id"
+        assert compute_flags(overdue, match=None) == []
 
     def test_underpaid_by_dollars(self):
         sub = _make_submission(expected_reimbursement=180_000)

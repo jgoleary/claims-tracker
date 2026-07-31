@@ -7,7 +7,7 @@ import Modal from '../components/Modal'
 import EscalationModal from '../components/EscalationModal'
 import AlertBadge from '../components/Alert'
 import RedactedName from '../components/RedactedName'
-import { computeExpected, formatCents, formatDate, normalizeProvider } from '../utils'
+import { computeExpected, formatCents, formatDate, isInterestingSubmission, normalizeProvider } from '../utils'
 import { useYear } from '../context/YearContext'
 import { useRedact } from '../context/RedactContext'
 
@@ -287,6 +287,8 @@ export default function Submissions() {
   const [escalating, setEscalating] = useState<SubmissionResponse | null>(null)
   const [filterMember, setFilterMember] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
+  const [filterProvider, setFilterProvider] = useState('')
+  const [hideSettled, setHideSettled] = useState(true)
 
   const params: Record<string, string> = { year: String(year) }
   if (filterMember) params.member = filterMember
@@ -299,6 +301,9 @@ export default function Submissions() {
 
   const memberNames = [...new Set((data ?? []).map((s) => s.member_name))].sort()
   const providerNames = [...new Set((data ?? []).map((s) => s.provider_name))].sort()
+  const submissions = (data ?? [])
+    .filter((s) => !filterProvider || s.provider_name === filterProvider)
+    .filter((s) => !hideSettled || isInterestingSubmission(s))
 
   return (
     <div>
@@ -318,6 +323,18 @@ export default function Submissions() {
           <option value="matched">Matched</option>
           <option value="unmatched">Unmatched</option>
         </select>
+        <select value={filterProvider} onChange={(e) => setFilterProvider(e.target.value)}
+          className="border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="">All Providers</option>
+          {providerNames.map((p) => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
+        <label className="flex items-center gap-2 text-sm text-gray-700 select-none">
+          <input type="checkbox" checked={hideSettled} onChange={(e) => setHideSettled(e.target.checked)}
+            className="rounded border-gray-300 focus:ring-2 focus:ring-blue-500" />
+          Hide approved with no flags
+        </label>
       </div>
       {isLoading ? <div className="text-gray-500">Loading…</div> : (
         <div className="bg-white border rounded-lg overflow-hidden shadow-sm">
@@ -330,7 +347,7 @@ export default function Submissions() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {(data ?? []).map((sub) => (
+              {submissions.map((sub) => (
                 <tr key={sub.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <Link to={`/submissions/${sub.id}`} className="font-medium text-blue-600 hover:underline"><RedactedName value={sub.member_name} /></Link>
@@ -350,6 +367,7 @@ export default function Submissions() {
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                         sub.anthem_claim_status === 'Approved' ? 'bg-green-100 text-green-700'
                         : sub.anthem_claim_status === 'Denied' ? 'bg-red-100 text-red-700'
+                        : sub.anthem_claim_status === 'Deleted' ? 'bg-gray-200 text-gray-600'
                         : 'bg-amber-100 text-amber-700'
                       }`}>
                         {sub.anthem_claim_status}
@@ -364,6 +382,9 @@ export default function Submissions() {
                       {sub.flags.map((f, i) => <AlertBadge key={i} flag={f.flag} severity={f.severity} />)}
                       {sub.escalated_at && (
                         <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">Escalated</span>
+                      )}
+                      {sub.superseded_by && (
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">Deprecated</span>
                       )}
                     </div>
                   </td>
@@ -385,7 +406,7 @@ export default function Submissions() {
                   </td>
                 </tr>
               ))}
-              {(data ?? []).length === 0 && (
+              {submissions.length === 0 && (
                 <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">No submissions</td></tr>
               )}
             </tbody>

@@ -7,10 +7,10 @@ def _add_claim(db, claim_number="CLM-001", status="Pending"):
     claim = AnthemClaim(
         claim_number=claim_number,
         claim_type="Medical",
-        patient_name="James OLeary",
+        patient_name="Alex Carter",
         service_date=date.today(),
         status=status,
-        provider_name="Joyful Behavior Therapy",
+        provider_name="Sunrise Behavior Therapy",
         billed=240_000, plan_discount=0, allowed=240_000,
         plan_paid=0, additional_savings=0, deductible=0,
         coinsurance=0, copay=0, not_covered=0, your_cost=0,
