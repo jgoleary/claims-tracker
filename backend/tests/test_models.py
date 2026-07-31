@@ -10,8 +10,8 @@ from app.models import (
 def test_create_submission(db: Session):
     s = Submission(
         id=str(uuid.uuid4()),
-        member_name="James OLeary",
-        provider_name="Joyful Behavior Therapy",
+        member_name="Alex Carter",
+        provider_name="Sunrise Behavior Therapy",
         service_date=date(2025, 11, 4),
         amount_billed=240_000,
         expected_reimbursement=180_000,
@@ -29,10 +29,10 @@ def test_create_anthem_claim(db: Session):
     c = AnthemClaim(
         claim_number="CLM-001",
         claim_type="Medical",
-        patient_name="James OLeary",
+        patient_name="Alex Carter",
         service_date=date(2025, 11, 4),
         status="Pending",
-        provider_name="Joyful Behavior Therapy",
+        provider_name="Sunrise Behavior Therapy",
         billed=240_000,
         plan_discount=0,
         allowed=240_000,
@@ -63,7 +63,7 @@ def test_create_match(db: Session, make_submission, make_claim):
 
 
 def test_create_provider_alias(db: Session):
-    a = ProviderAlias(canonical_name="joyful behavior therapy", anthem_name="joyful behavior therapy l")
+    a = ProviderAlias(canonical_name="sunrise behavior therapy", anthem_name="sunrise behavior therapy l")
     db.add(a)
     db.commit()
     assert a.id is not None

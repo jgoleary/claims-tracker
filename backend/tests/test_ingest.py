@@ -54,16 +54,16 @@ class TestParseDate:
 
 class TestParsePatientName:
     def test_strips_dob_and_surname(self):
-        assert _parse_patient_name("Nolan O'leary (2019-02-14)") == "Nolan"
+        assert _parse_patient_name("Jordan Rivera (2015-06-15)") == "Jordan"
 
     def test_first_name_only_with_dob(self):
-        assert _parse_patient_name("Nolan (02/14/2019)") == "Nolan"
+        assert _parse_patient_name("Jordan (06/15/2015)") == "Jordan"
 
     def test_no_dob(self):
-        assert _parse_patient_name("James OLeary") == "James"
+        assert _parse_patient_name("Alex Carter") == "Alex"
 
     def test_strips_whitespace(self):
-        assert _parse_patient_name("  James OLeary  ") == "James"
+        assert _parse_patient_name("  Alex Carter  ") == "Alex"
 
 
 class TestNormalizeStatus:
@@ -86,8 +86,8 @@ class TestNormalizeStatus:
 
 SAMPLE_CSV = """\
 Claim #,Type,Patient,Service Date,Status,Provider,Billed,Plan Discount,Allowed,Plan Paid,Additional Savings,Deductible,Coinsurance,Copay,Not Covered,Your Cost,Received Date,Processed Date
-CLM-001,Medical,James OLeary (1985-03-12),2025-11-04,Pending,Joyful Behavior Therapy,2400.00,0.00,2400.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,2025-11-06,Not Available
-CLM-002,Medical,Nolan OLeary (2019-02-14),2025-10-01,Approved,California Pacific Medica,"$1,190.00",0.00,"$1,190.00","$952.00",0.00,0.00,"$238.00",0.00,0.00,"$238.00",2025-10-03,2025-10-15
+CLM-001,Medical,Alex Carter (1980-09-20),2025-11-04,Pending,Sunrise Behavior Therapy,2400.00,0.00,2400.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,2025-11-06,Not Available
+CLM-002,Medical,Jordan Rivera (2015-06-15),2025-10-01,Approved,Lakeside Regional Medica,"$1,190.00",0.00,"$1,190.00","$952.00",0.00,0.00,"$238.00",0.00,0.00,"$238.00",2025-10-03,2025-10-15
 """
 
 SAMPLE_CSV_BOM = "﻿" + SAMPLE_CSV
@@ -123,12 +123,12 @@ class TestIngestClaimsCSV:
     def test_parses_patient_name(self, db: Session):
         ingest_claims_csv(db, SAMPLE_CSV.encode())
         clm1 = db.get(AnthemClaim, "CLM-001")
-        assert clm1.patient_name == "James"
+        assert clm1.patient_name == "Alex"
 
     def test_triggers_matching(self, db: Session, make_submission):
         make_submission(
-            member_name="James OLeary",
-            provider_name="Joyful Behavior Therapy",
+            member_name="Alex Carter",
+            provider_name="Sunrise Behavior Therapy",
             service_date=date(2025, 11, 4),
         )
         result = ingest_claims_csv(db, SAMPLE_CSV.encode())

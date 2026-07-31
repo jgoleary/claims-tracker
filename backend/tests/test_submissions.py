@@ -10,8 +10,8 @@ BASE = "/api/submissions"
 _TODAY = date.today().isoformat()
 
 SUBMISSION_BODY = {
-    "member_name": "James OLeary",
-    "provider_name": "Joyful Behavior Therapy",
+    "member_name": "Alex Carter",
+    "provider_name": "Sunrise Behavior Therapy",
     "service_date": _TODAY,
     "amount_billed": 240000,
     "expected_reimbursement": 180000,
@@ -25,14 +25,14 @@ def test_create_submission(client: TestClient):
     resp = client.post(BASE, json=SUBMISSION_BODY)
     assert resp.status_code == 201
     data = resp.json()
-    assert data["member_name"] == "James OLeary"
+    assert data["member_name"] == "Alex Carter"
     assert data["flags"] == []
     assert data["anthem_claim_number"] is None
 
 
 def test_list_submissions(client: TestClient):
     client.post(BASE, json=SUBMISSION_BODY)
-    client.post(BASE, json={**SUBMISSION_BODY, "member_name": "Nolan OLeary"})
+    client.post(BASE, json={**SUBMISSION_BODY, "member_name": "Jordan Rivera"})
     resp = client.get(BASE)
     assert resp.status_code == 200
     assert len(resp.json()) == 2
@@ -40,10 +40,10 @@ def test_list_submissions(client: TestClient):
 
 def test_list_filter_by_member(client: TestClient):
     client.post(BASE, json=SUBMISSION_BODY)
-    client.post(BASE, json={**SUBMISSION_BODY, "member_name": "Nolan OLeary"})
-    resp = client.get(BASE, params={"member": "Nolan"})
+    client.post(BASE, json={**SUBMISSION_BODY, "member_name": "Jordan Rivera"})
+    resp = client.get(BASE, params={"member": "Jordan"})
     assert len(resp.json()) == 1
-    assert resp.json()[0]["member_name"] == "Nolan OLeary"
+    assert resp.json()[0]["member_name"] == "Jordan Rivera"
 
 
 def test_get_submission(client: TestClient):
@@ -95,8 +95,8 @@ def test_download_pdf_not_found(client: TestClient):
 
 def test_create_submission_without_submitted_date(client):
     resp = client.post("/api/submissions", json={
-        "member_name": "James OLeary",
-        "provider_name": "Joyful Behavior Therapy",
+        "member_name": "Alex Carter",
+        "provider_name": "Sunrise Behavior Therapy",
         "service_date": "2026-05-06",
         "amount_billed": 57000,
         "expected_reimbursement": 25900,
@@ -115,7 +115,7 @@ def _make_old_and_new(client: TestClient):
     old = client.post(BASE, json={
         **SUBMISSION_BODY, "service_date": old_date, "submitted_date": old_date,
     }).json()
-    new = client.post(BASE, json={**SUBMISSION_BODY, "member_name": "James OLeary"}).json()
+    new = client.post(BASE, json={**SUBMISSION_BODY, "member_name": "Alex Carter"}).json()
     return old, new
 
 

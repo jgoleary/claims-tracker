@@ -15,7 +15,7 @@ export function isInterestingSubmission(
 }
 
 /** Mask a personal name for demos. When `redact`, each whitespace-separated token
- *  becomes `***` (e.g. "Nolan O'leary" → "*** ***"); otherwise the value is unchanged. */
+ *  becomes `***` (e.g. "Jordan Rivera" → "*** ***"); otherwise the value is unchanged. */
 export function maskName(value: string | null | undefined, redact: boolean): string {
   if (!value) return value ?? ''
   if (!redact) return value

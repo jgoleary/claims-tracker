@@ -7,9 +7,9 @@ from app.escalation import build_escalation_message
 # ── per-flag templates, claim-specific values plugged in ─────────────────────
 
 def test_generic_mentions_provider_and_service_date(make_submission):
-    sub = make_submission(provider_name="Joyful Behavior Therapy", service_date=date(2025, 11, 4))
+    sub = make_submission(provider_name="Sunrise Behavior Therapy", service_date=date(2025, 11, 4))
     msg = build_escalation_message(sub, [])
-    assert "Joyful Behavior Therapy" in msg
+    assert "Sunrise Behavior Therapy" in msg
     assert "November 4, 2025" in msg
     assert "resolv" in msg.lower()
 

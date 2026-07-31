@@ -28,8 +28,8 @@ def db():
 @pytest.fixture
 def make_submission(db: Session):
     def factory(
-        member_name: str = "James OLeary",
-        provider_name: str = "Joyful Behavior Therapy",
+        member_name: str = "Alex Carter",
+        provider_name: str = "Sunrise Behavior Therapy",
         service_date: date = date(2025, 11, 4),
         amount_billed: int = 240_000,
         expected_reimbursement: int = 180_000,
@@ -59,10 +59,10 @@ def make_submission(db: Session):
 def make_claim(db: Session):
     def factory(
         claim_number: str = "CLM-001",
-        patient_name: str = "James OLeary",
+        patient_name: str = "Alex Carter",
         service_date: date = date(2025, 11, 4),
         status: str = "Pending",
-        provider_name: str = "Joyful Behavior Therapy",
+        provider_name: str = "Sunrise Behavior Therapy",
         claim_type: str = "Medical",
         billed: int = 240_000,
         plan_discount: int = 0,

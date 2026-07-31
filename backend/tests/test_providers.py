@@ -3,7 +3,7 @@ from datetime import datetime
 from app.models import ProviderAlias
 
 
-def _add_alias(db, canonical="citrus speech", anthem="citrus speech and language"):
+def _add_alias(db, canonical="bluebird speech", anthem="bluebird speech and language"):
     a = ProviderAlias(canonical_name=canonical, anthem_name=anthem)
     db.add(a)
     db.commit()
@@ -21,7 +21,7 @@ def test_list_aliases(client, db):
     _add_alias(db)
     resp = client.get("/api/providers/aliases")
     assert len(resp.json()) == 1
-    assert resp.json()[0]["canonical_name"] == "citrus speech"
+    assert resp.json()[0]["canonical_name"] == "bluebird speech"
 
 
 def test_delete_alias(client, db):
@@ -50,11 +50,11 @@ def test_network_defaults_returns_most_recent_per_provider(client, db, make_subm
     new = make_submission(provider_name="dr smith", network_treatment="in_network_exception")
     new.created_at = datetime(2025, 6, 1)
     # A separate provider keeps its own default.
-    other = make_submission(provider_name="Joyful Behavior Therapy", network_treatment="out_of_network")
+    other = make_submission(provider_name="Sunrise Behavior Therapy", network_treatment="out_of_network")
     other.created_at = datetime(2025, 3, 1)
     db.commit()
 
     body = client.get("/api/providers/network-defaults").json()
     # Both "Dr. Smith" variants normalize to the same key; the most recent wins.
     assert body["dr smith"] == "in_network_exception"
-    assert body["joyful behavior therapy"] == "out_of_network"
+    assert body["sunrise behavior therapy"] == "out_of_network"

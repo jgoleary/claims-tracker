@@ -7,19 +7,19 @@ from datetime import date
 
 class TestNormalize:
     def test_lowercases(self):
-        assert normalize("JOYFUL BEHAVIOR") == "joyful behavior"
+        assert normalize("SUNRISE BEHAVIOR") == "sunrise behavior"
 
     def test_strips_leading_trailing_whitespace(self):
         assert normalize("  hello  ") == "hello"
 
     def test_collapses_internal_whitespace(self):
-        assert normalize("joyful  behavior   therapy") == "joyful behavior therapy"
+        assert normalize("sunrise  behavior   therapy") == "sunrise behavior therapy"
 
     def test_strips_punctuation(self):
         assert normalize("St. Mary's") == "st marys"
 
     def test_strips_special_chars(self):
-        assert normalize("O'Leary, James") == "oleary james"
+        assert normalize("Carter, Alex") == "carter alex"
 
     def test_keeps_numbers(self):
         assert normalize("Provider 123") == "provider 123"
@@ -30,29 +30,29 @@ class TestNormalize:
 
 class TestProviderMatches:
     def test_exact_match(self):
-        assert _provider_matches("Joyful Behavior Therapy", "Joyful Behavior Therapy", [])
+        assert _provider_matches("Sunrise Behavior Therapy", "Sunrise Behavior Therapy", [])
 
     def test_exact_match_case_insensitive(self):
-        assert _provider_matches("JOYFUL BEHAVIOR", "joyful behavior", [])
+        assert _provider_matches("SUNRISE BEHAVIOR", "sunrise behavior", [])
 
     def test_prefix_match_claim_truncated(self):
         # Anthem truncates at ~25 chars
-        assert _provider_matches("Joyful Behavior Therapy LLC", "Joyful Behavior Therapy L", [])
+        assert _provider_matches("Sunrise Behavior Therapy LLC", "Sunrise Behavior Therapy L", [])
 
     def test_prefix_match_submission_shorter(self):
-        assert _provider_matches("California Pacific", "California Pacific Medical Center", [])
+        assert _provider_matches("Lakeside Regional", "Lakeside Regional Medical Center", [])
 
     def test_alias_match(self):
-        aliases = [("citrus speech", "citrus speech and language")]
-        assert _provider_matches("Citrus Speech", "Citrus Speech and Language", aliases)
+        aliases = [("bluebird speech", "bluebird speech and language")]
+        assert _provider_matches("Bluebird Speech", "Bluebird Speech and Language", aliases)
 
     def test_no_match(self):
-        assert not _provider_matches("Dr. Smith", "Joyful Behavior Therapy", [])
+        assert not _provider_matches("Dr. Smith", "Sunrise Behavior Therapy", [])
 
     def test_prefix_match_with_unrelated_aliases_present(self):
         # Aliases exist but don't involve these providers — prefix match should still work
-        aliases = [("citrus speech", "citrus speech and language")]
-        assert _provider_matches("California Pacific", "California Pacific Medical Center", aliases)
+        aliases = [("bluebird speech", "bluebird speech and language")]
+        assert _provider_matches("Lakeside Regional", "Lakeside Regional Medical Center", aliases)
 
 
 class TestRunMatching:
@@ -65,20 +65,20 @@ class TestRunMatching:
         assert db.get(Match, sub.id) is not None
 
     def test_auto_match_prefix_provider(self, db: Session, make_submission, make_claim):
-        sub = make_submission(provider_name="Joyful Behavior Therapy LLC")
-        claim = make_claim(provider_name="Joyful Behavior Therapy L")
+        sub = make_submission(provider_name="Sunrise Behavior Therapy LLC")
+        claim = make_claim(provider_name="Sunrise Behavior Therapy L")
         result = run_matching(db)
         assert len(result.auto_matched) == 1
 
     def test_auto_match_via_alias(self, db: Session, make_submission, make_claim):
         alias = ProviderAlias(
-            canonical_name="citrus speech",
-            anthem_name="citrus speech and language",
+            canonical_name="bluebird speech",
+            anthem_name="bluebird speech and language",
         )
         db.add(alias)
         db.commit()
-        sub = make_submission(provider_name="Citrus Speech")
-        claim = make_claim(provider_name="Citrus Speech and Language")
+        sub = make_submission(provider_name="Bluebird Speech")
+        claim = make_claim(provider_name="Bluebird Speech and Language")
         result = run_matching(db)
         assert len(result.auto_matched) == 1
 
@@ -90,8 +90,8 @@ class TestRunMatching:
         assert result.suggestions == []
 
     def test_no_match_different_member(self, db: Session, make_submission, make_claim):
-        make_submission(member_name="James OLeary")
-        make_claim(patient_name="Nolan OLeary")
+        make_submission(member_name="Alex Carter")
+        make_claim(patient_name="Jordan Rivera")
         result = run_matching(db)
         assert result.auto_matched == []
         assert result.suggestions == []

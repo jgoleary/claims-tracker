@@ -40,7 +40,7 @@ def _parse_date(s: str) -> Optional[date]:
 
 
 def _parse_patient_name(s: str) -> str:
-    """Parse "Nolan O'leary (2019-02-14)" -> "Nolan" (first name only).
+    """Parse "Jordan Rivera (2015-06-15)" -> "Jordan" (first name only).
 
     Anthem's export carries the patient's name plus a DOB, but the name part is
     inconsistent across exports — sometimes "First Last", sometimes just "First".

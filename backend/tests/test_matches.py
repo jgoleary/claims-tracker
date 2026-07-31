@@ -4,8 +4,8 @@ from app.models import AnthemClaim
 
 
 SUBMISSION_BODY = {
-    "member_name": "James OLeary",
-    "provider_name": "Joyful Behavior Therapy",
+    "member_name": "Alex Carter",
+    "provider_name": "Sunrise Behavior Therapy",
     "service_date": "2026-04-28",
     "amount_billed": 240000,
     "expected_reimbursement": 180000,
@@ -22,8 +22,8 @@ def _create_submission(client):
 def _add_claim(db, claim_number="CLM-001"):
     c = AnthemClaim(
         claim_number=claim_number, claim_type="Medical",
-        patient_name="James OLeary", service_date=date(2026, 4, 28),
-        status="Pending", provider_name="Joyful Behavior Therapy",
+        patient_name="Alex Carter", service_date=date(2026, 4, 28),
+        status="Pending", provider_name="Sunrise Behavior Therapy",
         billed=240_000, plan_discount=0, allowed=240_000,
         plan_paid=0, additional_savings=0, deductible=0,
         coinsurance=0, copay=0, not_covered=0, your_cost=0,
@@ -91,14 +91,14 @@ def test_suggestion_full_name_submission_matches_first_name_claim(client, db):
     # ingest counts a suggestion the Match Review page can't surface.
     sub = client.post("/api/submissions", json={
         **SUBMISSION_BODY,
-        "member_name": "Nolan O'Leary",
-        "provider_name": "Citrus Speech",
+        "member_name": "Jordan Rivera",
+        "provider_name": "Bluebird Speech",
         "service_date": "2026-06-03",
     }).json()
     c = AnthemClaim(
-        claim_number="CLM-NOLAN", claim_type="Medical",
-        patient_name="Nolan", service_date=date(2026, 6, 3),
-        status="Pending", provider_name="Jennifer Hodges",
+        claim_number="CLM-JORDAN", claim_type="Medical",
+        patient_name="Jordan", service_date=date(2026, 6, 3),
+        status="Pending", provider_name="Dana Fletcher",
         billed=240_000, plan_discount=0, allowed=240_000,
         plan_paid=0, additional_savings=0, deductible=0,
         coinsurance=0, copay=0, not_covered=0, your_cost=0,
@@ -111,4 +111,4 @@ def test_suggestion_full_name_submission_matches_first_name_claim(client, db):
     body = resp.json()
     assert len(body) == 1
     assert body[0]["submission"]["id"] == sub["id"]
-    assert [c["claim_number"] for c in body[0]["candidates"]] == ["CLM-NOLAN"]
+    assert [c["claim_number"] for c in body[0]["candidates"]] == ["CLM-JORDAN"]

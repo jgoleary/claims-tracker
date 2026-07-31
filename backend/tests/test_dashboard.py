@@ -3,10 +3,10 @@ from app.models import AnthemClaim, BenefitsSnapshot, Match, Submission
 import uuid
 
 
-def _add_submission(db, submitted_date=None, provider="Joyful Behavior Therapy"):
+def _add_submission(db, submitted_date=None, provider="Sunrise Behavior Therapy"):
     s = Submission(
         id=str(uuid.uuid4()),
-        member_name="James OLeary",
+        member_name="Alex Carter",
         provider_name=provider,
         service_date=date(2026, 4, 28),
         amount_billed=240_000,
@@ -39,9 +39,9 @@ def test_dashboard_missing_flag(client, db):
 def test_dashboard_denied_flag(client, db):
     sub = _add_submission(db)
     claim = AnthemClaim(
-        claim_number="CLM-001", claim_type="Medical", patient_name="James OLeary",
+        claim_number="CLM-001", claim_type="Medical", patient_name="Alex Carter",
         service_date=date(2026, 4, 28), status="Denied",
-        provider_name="Joyful Behavior Therapy",
+        provider_name="Sunrise Behavior Therapy",
         billed=240_000, plan_discount=0, allowed=0, plan_paid=0,
         additional_savings=0, deductible=0, coinsurance=0, copay=0,
         not_covered=240_000, your_cost=240_000,
@@ -58,9 +58,9 @@ def test_dashboard_denied_flag(client, db):
 def test_dashboard_deleted_flag(client, db):
     sub = _add_submission(db)
     claim = AnthemClaim(
-        claim_number="CLM-001", claim_type="Medical", patient_name="James OLeary",
+        claim_number="CLM-001", claim_type="Medical", patient_name="Alex Carter",
         service_date=date(2026, 4, 28), status="Deleted",
-        provider_name="Joyful Behavior Therapy",
+        provider_name="Sunrise Behavior Therapy",
         billed=240_000, plan_discount=0, allowed=0, plan_paid=0,
         additional_savings=0, deductible=0, coinsurance=0, copay=0,
         not_covered=240_000, your_cost=240_000,

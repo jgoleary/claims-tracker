@@ -106,7 +106,7 @@ def test_run_escalation_success_marks_escalated(monkeypatch):
                         lambda *a, **k: MagicMock(returncode=0, stdout="ok", stderr=""))
     monkeypatch.setattr(_auto.threading, "Thread", _SyncThread)
 
-    assert _auto.run_escalation("sub-1", "Nolan O'Leary", "Dr X", "2025-11-04", "hi") is True
+    assert _auto.run_escalation("sub-1", "Jordan Rivera", "Dr X", "2025-11-04", "hi") is True
     assert marked == ["sub-1"]
     assert writes[-1]["status"] == "complete"
     assert writes[-1]["submission_id"] == "sub-1"

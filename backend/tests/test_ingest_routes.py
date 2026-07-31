@@ -5,7 +5,7 @@ SAMPLE_CSV = (
     "Claim #,Type,Patient,Service Date,Status,Provider,"
     "Billed,Plan Discount,Allowed,Plan Paid,Additional Savings,"
     "Deductible,Coinsurance,Copay,Not Covered,Your Cost,Received Date,Processed Date\r\n"
-    "CLM-001,Medical,James OLeary (1985-03-12),2025-11-04,Pending,Joyful Behavior Therapy,"
+    "CLM-001,Medical,Alex Carter (1980-09-20),2025-11-04,Pending,Sunrise Behavior Therapy,"
     "2400.00,0.00,2400.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00,2025-11-06,Not Available\r\n"
 )
 
