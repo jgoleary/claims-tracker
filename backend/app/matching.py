@@ -47,38 +47,62 @@ class MatchResult:
     suggestions: list[tuple[str, list[str]]] = field(default_factory=list)
 
 
-def run_matching(db: Session) -> MatchResult:
-    result = MatchResult()
+@dataclass
+class MatchOutcome:
+    """One submission's classification against the unmatched-claim pool.
 
-    unmatched_submissions = db.scalars(
-        select(Submission).where(
-            ~exists().where(Match.submission_id == Submission.id)
-        )
-    ).all()
+    kind == "auto":       ``claims`` holds the single confident provider match.
+    kind == "suggestion": ``claims`` holds the candidates needing human review
+                          (either an ambiguous multi-provider match, or a
+                          member+date match with no provider match).
+    """
+    submission: Submission
+    kind: str
+    claims: list[AnthemClaim]
 
+
+def load_matching_inputs(db: Session, submissions=None):
+    """Load the (unmatched submissions, unmatched claims, aliases) triple that
+    the matcher operates on. Callers that need eager-loaded submissions (e.g.
+    for serialization) may pass their own ``submissions`` list."""
+    if submissions is None:
+        submissions = db.scalars(
+            select(Submission).where(
+                ~exists().where(Match.submission_id == Submission.id)
+            )
+        ).all()
     unmatched_claims = db.scalars(
         select(AnthemClaim).where(
             ~exists().where(Match.anthem_claim_number == AnthemClaim.claim_number)
         )
     ).all()
-
     aliases = [
         (a.canonical_name, a.anthem_name)
         for a in db.scalars(select(ProviderAlias)).all()
     ]
+    return submissions, unmatched_claims, aliases
 
-    newly_matched_claims: set[str] = set()
 
-    for submission in unmatched_submissions:
+def classify_matches(submissions, unmatched_claims, aliases):
+    """Yield a MatchOutcome for each submission that has ≥1 candidate claim.
+
+    A claim auto-matched to an earlier submission is dropped from later
+    submissions' candidate pools, so one claim is never offered twice in a pass.
+
+    Single source of truth for the candidate filter and tiering — shared by
+    run_matching() (persists auto-matches, counts suggestions) and the
+    /matches/suggestions endpoint (surfaces those same suggestions). Keep them
+    consuming this so the two can't drift.
+    """
+    claimed: set[str] = set()
+    for submission in submissions:
         member_first = _first_name(submission.member_name)
-
         candidates = [
             c for c in unmatched_claims
-            if c.claim_number not in newly_matched_claims
+            if c.claim_number not in claimed
             and c.service_date == submission.service_date
             and _first_name(c.patient_name) == member_first
         ]
-
         if not candidates:
             continue
 
@@ -88,17 +112,30 @@ def run_matching(db: Session) -> MatchResult:
         ]
 
         if len(tier1) == 1:
+            claimed.add(tier1[0].claim_number)
+            yield MatchOutcome(submission, "auto", [tier1[0]])
+        elif len(tier1) > 1:
+            yield MatchOutcome(submission, "suggestion", tier1)
+        else:
+            yield MatchOutcome(submission, "suggestion", candidates)
+
+
+def run_matching(db: Session) -> MatchResult:
+    result = MatchResult()
+    submissions, unmatched_claims, aliases = load_matching_inputs(db)
+
+    for outcome in classify_matches(submissions, unmatched_claims, aliases):
+        sub_id = outcome.submission.id
+        if outcome.kind == "auto":
+            claim = outcome.claims[0]
             db.add(Match(
-                submission_id=submission.id,
-                anthem_claim_number=tier1[0].claim_number,
+                submission_id=sub_id,
+                anthem_claim_number=claim.claim_number,
                 match_type="auto",
             ))
-            newly_matched_claims.add(tier1[0].claim_number)
-            result.auto_matched.append((submission.id, tier1[0].claim_number))
-        elif len(tier1) > 1:
-            result.suggestions.append((submission.id, [c.claim_number for c in tier1]))
+            result.auto_matched.append((sub_id, claim.claim_number))
         else:
-            result.suggestions.append((submission.id, [c.claim_number for c in candidates]))
+            result.suggestions.append((sub_id, [c.claim_number for c in outcome.claims]))
 
     db.commit()
     return result

@@ -5,7 +5,7 @@ from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.matching import _provider_matches, normalize
+from app.matching import classify_matches, load_matching_inputs, normalize
 from app.models import AnthemClaim, Match, ProviderAlias, Submission
 from app.routes.anthem_claims import _to_response as _claim_to_response
 from app.routes.submissions import _load_options, _to_response as _sub_to_response
@@ -16,51 +16,27 @@ router = APIRouter()
 
 @router.get("/matches/suggestions", response_model=list[MatchSuggestion])
 def get_suggestions(db: Session = Depends(get_db)):
-    # Suggestions computed on read (not stored).
-    # Surfaces tier-1 conflicts (multiple provider matches) and tier-2 (no provider match).
+    # Suggestions are computed on read (not stored) via the same classifier that
+    # run_matching() uses to count them at ingest — see matching.classify_matches.
+    # We only report the "suggestion" outcomes; "auto" ones are (or will be) matched.
     unmatched_subs = db.scalars(
         select(Submission)
         .where(~exists().where(Match.submission_id == Submission.id))
         .options(*_load_options())
     ).all()
 
-    unmatched_claims = db.scalars(
-        select(AnthemClaim).where(
-            ~exists().where(Match.anthem_claim_number == AnthemClaim.claim_number)
+    submissions, unmatched_claims, aliases = load_matching_inputs(
+        db, submissions=unmatched_subs
+    )
+
+    return [
+        MatchSuggestion(
+            submission=_sub_to_response(outcome.submission),
+            candidates=[_claim_to_response(c) for c in outcome.claims],
         )
-    ).all()
-
-    aliases = [
-        (a.canonical_name, a.anthem_name)
-        for a in db.scalars(select(ProviderAlias)).all()
+        for outcome in classify_matches(submissions, unmatched_claims, aliases)
+        if outcome.kind == "suggestion"
     ]
-
-    suggestions = []
-    for sub in unmatched_subs:
-        norm_member = normalize(sub.member_name)
-        candidates = [
-            c for c in unmatched_claims
-            if c.service_date == sub.service_date
-            and normalize(c.patient_name) == norm_member
-        ]
-        if not candidates:
-            continue
-
-        tier1 = [c for c in candidates if _provider_matches(sub.provider_name, c.provider_name, aliases)]
-
-        if len(tier1) == 1:
-            continue  # already auto-matched or will be on next ingest
-        elif len(tier1) > 1:
-            suggestions.append(MatchSuggestion(
-                submission=_sub_to_response(sub),
-                candidates=[_claim_to_response(c) for c in tier1],
-            ))
-        else:
-            suggestions.append(MatchSuggestion(
-                submission=_sub_to_response(sub),
-                candidates=[_claim_to_response(c) for c in candidates],
-            ))
-    return suggestions
 
 
 @router.post("/matches", status_code=201)

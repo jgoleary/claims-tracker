@@ -82,3 +82,33 @@ def test_suggestions_empty(client):
     resp = client.get("/api/matches/suggestions")
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+def test_suggestion_full_name_submission_matches_first_name_claim(client, db):
+    # Submission holds a full member name; Anthem stores patient_name first-name-only.
+    # Provider differs, so this is a tier-2 suggestion. The endpoint must match members
+    # by first name (as run_matching does), not by full-name equality — otherwise the
+    # ingest counts a suggestion the Match Review page can't surface.
+    sub = client.post("/api/submissions", json={
+        **SUBMISSION_BODY,
+        "member_name": "Nolan O'Leary",
+        "provider_name": "Citrus Speech",
+        "service_date": "2026-06-03",
+    }).json()
+    c = AnthemClaim(
+        claim_number="CLM-NOLAN", claim_type="Medical",
+        patient_name="Nolan", service_date=date(2026, 6, 3),
+        status="Pending", provider_name="Jennifer Hodges",
+        billed=240_000, plan_discount=0, allowed=240_000,
+        plan_paid=0, additional_savings=0, deductible=0,
+        coinsurance=0, copay=0, not_covered=0, your_cost=0,
+    )
+    db.add(c)
+    db.commit()
+
+    resp = client.get("/api/matches/suggestions")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 1
+    assert body[0]["submission"]["id"] == sub["id"]
+    assert [c["claim_number"] for c in body[0]["candidates"]] == ["CLM-NOLAN"]
