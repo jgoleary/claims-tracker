@@ -40,6 +40,8 @@ npm run lint
 3. Matching algorithm links submissions ↔ anthem_claims via the `matches` table. Matching
    runs automatically after every CSV ingest, submission create, and submission update.
 4. Alert flags are computed on-read (not stored) from the match state.
+5. Each CSV ingest then reopens any manually resolved submission that picked up a new flag
+   (see Manual resolution).
 
 ### Backend (`backend/app/`)
 
@@ -48,8 +50,8 @@ npm run lint
   schema auto-creates on startup via `init_db()`.
 - **All money is integer cents** — never floats. `ingest.py:_parse_money()` converts
   `"$1,190.00"` → `119000`.
-- **`models.py`** — five tables: `submissions`, `anthem_claims`, `matches`,
-  `provider_aliases`, `benefits_snapshots`.
+- **`models.py`** — six tables: `submissions`, `anthem_claims`, `matches`,
+  `provider_aliases`, `plan_config`, `benefits_snapshots`.
 - **`matching.py`** — `run_matching()` is called after every CSV ingest, submission
   create, and submission update. Three-tier logic: (1) exact/prefix/alias provider match →
   auto; (2) member+date match but no provider → suggestion; (3) ambiguous multi-match →
@@ -62,18 +64,24 @@ npm run lint
   across all anthem_claims, supplied by `routes/submissions.latest_ingest_at(db)`) — i.e.
   the claim dropped out of Anthem's latest export. Ingest is upsert-only and never deletes
   vanished claims, so this is how a disappeared-but-still-matched claim gets surfaced.
+  `compute_flags()` is a thin wrapper that suppresses everything for a resolved or
+  superseded submission and otherwise delegates to `compute_raw_flags()`, which does the
+  actual work; call the raw variant only when you need to see through a resolution.
+- **`resolution.py`** — `reopen_resolved(db)` undoes manual resolutions that no longer
+  hold. See Manual resolution.
 - **`ingest.py`** — `ingest_claims_csv()` parses the Anthem CSV (BOM-safe via `utf-8-sig`,
   handles `"Not Available"` dates, `"$1,190.00"` money), upserts anthem_claims, then calls
-  `run_matching()`. `_parse_date()` accepts both ISO (`2026-05-26`) and Anthem's display
-  format (`May 26, 2026`) — the `/member/claims` export uses the display format.
-  `ingest_benefits()` inserts a `BenefitsSnapshot` row per network. Anthem's export uses
-  `Claim Number`, `Claim Type`, `Provided By`, and `Claim Received` — the parser accepts
-  both those names and legacy alternatives. `_parse_patient_name()` canonicalizes the
-  `Patient` field (`"Nolan O'leary (2019-02-14)"`) to the **first name only** (`"Nolan"`)
-  — Anthem exports the name inconsistently (`"First Last"` vs `"First"`) across exports,
-  so the surname/DOB are dropped to keep one person from fragmenting into multiple
-  `patient_name` values. Matching compares on first name (`matching.py:_first_name`) so
-  full-name submissions still link to first-name claims.
+  `run_matching()` followed by `resolution.reopen_resolved()`. `_parse_date()` accepts
+  both ISO (`2026-05-26`) and Anthem's display format (`May 26, 2026`) — the
+  `/member/claims` export uses the display format. `ingest_benefits()` inserts a
+  `BenefitsSnapshot` row per network. Anthem's export uses `Claim Number`, `Claim Type`,
+  `Provided By`, and `Claim Received` — the parser accepts both those names and legacy
+  alternatives. `_parse_patient_name()` canonicalizes the `Patient` field
+  (`"Nolan O'leary (2019-02-14)"`) to the **first name only** (`"Nolan"`) — Anthem exports
+  the name inconsistently (`"First Last"` vs `"First"`) across exports, so the surname/DOB
+  are dropped to keep one person from fragmenting into multiple `patient_name` values.
+  Matching compares on first name (`matching.py:_first_name`) so full-name submissions
+  still link to first-name claims.
 - **`storage.py`** — `Storage` ABC with `LocalFileStorage` impl. PDF files stored under
   `data/pdfs/`. The `pdf_path` column is a storage key, not a raw filesystem path. Swap to
   S3 by implementing `Storage` and calling `set_storage()`.
@@ -154,7 +162,9 @@ with the suppression.
   badges; rows and badges stay severity-ordered (red → yellow → info).
 - Submissions table exposes Match Status, Anthem Status, and Plan Paid from the linked
   anthem claim. Edit modal reuses `SubmissionModal` with pre-populated fields (amounts
-  converted from cents to dollars).
+  converted from cents to dollars). The "Hide resolved submissions" checkbox filters on
+  `utils.isInterestingSubmission()`; rows hidden by it carry a gray "Resolved" or
+  "Deprecated" badge when the filter is off.
 - AnthemClaims table has Deductible and Coinsurance columns with a totals footer. Patient
   name links to a detail page showing all financials and the claim number.
 
