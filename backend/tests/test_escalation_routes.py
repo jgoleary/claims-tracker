@@ -21,6 +21,21 @@ def test_escalate_draft_includes_claim_number_when_matched(client, db, make_subm
     assert "CLM-XYZ" in resp.json()["message"]
 
 
+def test_escalate_draft_proposes_oon_processing_for_unapplied_exception(
+    client, db, make_submission, make_claim
+):
+    sub = make_submission(network_treatment="in_network_exception")
+    claim = make_claim(claim_number="CLM-INN", status="Approved", plan_paid=0, your_cost=240_000)
+    from app.models import Match
+    db.add(Match(submission_id=sub.id, anthem_claim_number=claim.claim_number, match_type="manual"))
+    db.commit()
+    resp = client.post(f"/api/submissions/{sub.id}/escalate/draft")
+    assert resp.status_code == 200
+    message = resp.json()["message"].lower()
+    assert "in-network exception" in message
+    assert "processed as out-of-network" in message
+
+
 def test_escalate_draft_404(client):
     resp = client.post("/api/submissions/does-not-exist/escalate/draft")
     assert resp.status_code == 404

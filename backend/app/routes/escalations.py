@@ -24,7 +24,10 @@ def escalate_draft(id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Submission not found")
     flags = compute_flags(sub, sub.match, latest_ingest_at=latest_ingest_at(db))
     claim_number = sub.match.anthem_claim_number if sub.match else None
-    return EscalationDraft(message=build_escalation_message(sub, flags, claim_number=claim_number))
+    claim = sub.match.anthem_claim if sub.match else None
+    return EscalationDraft(
+        message=build_escalation_message(sub, flags, claim_number=claim_number, claim=claim)
+    )
 
 
 @router.post("/submissions/{id}/escalate/run", status_code=202)

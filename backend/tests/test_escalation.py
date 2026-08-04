@@ -52,6 +52,57 @@ def test_vanished(make_submission):
     assert "disappear" in msg.lower()
 
 
+# ── in-network exception approved but paid $0 ────────────────────────────────
+
+def test_inn_exception_approved_zero_paid_proposes_oon_processing(make_submission, make_claim):
+    sub = make_submission(network_treatment="in_network_exception")
+    claim = make_claim(status="Approved", plan_paid=0)
+    msg = build_escalation_message(sub, [], claim=claim)
+    assert "in-network exception" in msg.lower()
+    assert "processed as out-of-network" in msg.lower()
+    assert "$0.00" in msg              # plan paid
+    assert "$1,800.00" in msg          # expected reimbursement
+
+
+def test_inn_exception_template_beats_underpaid(make_submission, make_claim):
+    sub = make_submission(network_treatment="in_network_exception")
+    claim = make_claim(status="Approved", plan_paid=0)
+    msg = build_escalation_message(sub, [Alert("UNDERPAID", "yellow", {
+        "expected_cents": 180_000, "plan_paid_cents": 0, "diff_cents": 180_000,
+    })], claim=claim)
+    assert "in-network exception" in msg.lower()
+    assert "shortfall" not in msg.lower()
+
+
+def test_inn_exception_template_yields_to_vanished(make_submission, make_claim):
+    sub = make_submission(network_treatment="in_network_exception")
+    claim = make_claim(status="Approved", plan_paid=0)
+    msg = build_escalation_message(sub, [Alert("VANISHED", "red", {})], claim=claim)
+    assert "disappear" in msg.lower()
+
+
+def test_out_of_network_approved_zero_paid_uses_normal_template(make_submission, make_claim):
+    sub = make_submission(network_treatment="out_of_network")
+    claim = make_claim(status="Approved", plan_paid=0)
+    msg = build_escalation_message(sub, [], claim=claim)
+    assert "in-network exception" not in msg.lower()
+
+
+def test_inn_exception_with_payment_uses_normal_template(make_submission, make_claim):
+    sub = make_submission(network_treatment="in_network_exception")
+    claim = make_claim(status="Approved", plan_paid=180_000)
+    msg = build_escalation_message(sub, [], claim=claim)
+    assert "in-network exception" not in msg.lower()
+
+
+def test_inn_exception_omits_expected_note_when_expecting_nothing(make_submission, make_claim):
+    sub = make_submission(network_treatment="in_network_exception", expected_reimbursement=0)
+    claim = make_claim(status="Approved", plan_paid=0)
+    msg = build_escalation_message(sub, [], claim=claim)
+    assert "in-network exception" in msg.lower()
+    assert "I had expected reimbursement" not in msg
+
+
 # ── claim number ─────────────────────────────────────────────────────────────
 
 def test_includes_claim_number_when_present(make_submission):
@@ -98,6 +149,14 @@ def test_every_template_states_submission_date(make_submission):
     for flags in flag_sets:
         msg = build_escalation_message(sub, flags)
         assert "I submitted this claim on November 10, 2025" in msg
+
+
+def test_inn_exception_template_states_submission_date(make_submission, make_claim):
+    sub = make_submission(network_treatment="in_network_exception",
+                          submitted_date=date(2025, 11, 10))
+    claim = make_claim(status="Approved", plan_paid=0)
+    msg = build_escalation_message(sub, [], claim=claim)
+    assert "I submitted this claim on November 10, 2025" in msg
 
 
 def test_submission_date_omitted_when_never_submitted(make_submission):
