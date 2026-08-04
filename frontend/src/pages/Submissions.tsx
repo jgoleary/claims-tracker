@@ -333,7 +333,7 @@ export default function Submissions() {
         <label className="flex items-center gap-2 text-sm text-gray-700 select-none">
           <input type="checkbox" checked={hideSettled} onChange={(e) => setHideSettled(e.target.checked)}
             className="rounded border-gray-300 focus:ring-2 focus:ring-blue-500" />
-          Hide approved with no flags
+          Hide resolved submissions
         </label>
       </div>
       {isLoading ? <div className="text-gray-500">Loading…</div> : (
