@@ -24,6 +24,7 @@ export interface SubmissionResponse {
   pdf_path: string | null
   notes: string | null
   escalated_at: string | null
+  resolved_at: string | null
   created_at: string
   updated_at: string
   anthem_claim_number: string | null

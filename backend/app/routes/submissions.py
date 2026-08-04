@@ -7,12 +7,13 @@ from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.alerts import compute_flags
+from app.alerts import compute_flags, compute_raw_flags
 from app.config import plan_year_dates
 from app.database import get_db
 from app.extraction import extract_submission_fields
 from app.matching import run_matching
 from app.models import AnthemClaim, Match, Submission
+from app.resolution import snapshot_flags
 from app.schemas import (
     AlertOut, ExtractionResult, SubmissionCreate, SubmissionRef,
     SubmissionResponse, SubmissionUpdate, SupersedeRequest,
@@ -44,6 +45,7 @@ def _to_response(submission: Submission, latest_ingest: Optional[datetime] = Non
         pdf_path=submission.pdf_path,
         notes=submission.notes,
         escalated_at=submission.escalated_at,
+        resolved_at=submission.resolved_at,
         created_at=submission.created_at,
         updated_at=submission.updated_at,
         anthem_claim_number=match.anthem_claim_number if match else None,
@@ -170,6 +172,42 @@ def unsupersede_submission(id: str, db: Session = Depends(get_db)):
     if not sub:
         raise HTTPException(status_code=404, detail="Submission not found")
     sub.superseded_by_id = None
+    sub.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    sub = db.scalars(
+        select(Submission).where(Submission.id == id).options(*_load_options())
+    ).one()
+    return _to_response(sub, latest_ingest_at(db))
+
+
+@router.post("/submissions/{id}/resolve", response_model=SubmissionResponse)
+def resolve_submission(id: str, db: Session = Depends(get_db)):
+    """Manually close out a submission whose flags are accurate but no longer actionable
+    (e.g. an overpayment). A resolved submission raises no alerts and drops out of the
+    default views. The flags it has right now are snapshotted, so a later ingest that
+    raises a flag type it didn't have reopens it (see app.resolution)."""
+    sub = db.get(Submission, id)
+    if not sub:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    flags = compute_raw_flags(sub, sub.match, latest_ingest_at=latest_ingest_at(db))
+    sub.resolved_at = datetime.now(timezone.utc)
+    sub.resolved_flags = snapshot_flags(flags)
+    sub.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    sub = db.scalars(
+        select(Submission).where(Submission.id == id).options(*_load_options())
+    ).one()
+    return _to_response(sub, latest_ingest_at(db))
+
+
+@router.delete("/submissions/{id}/resolve", response_model=SubmissionResponse)
+def unresolve_submission(id: str, db: Session = Depends(get_db)):
+    """Undo a manual resolution — the submission's flags come back."""
+    sub = db.get(Submission, id)
+    if not sub:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    sub.resolved_at = None
+    sub.resolved_flags = None
     sub.updated_at = datetime.now(timezone.utc)
     db.commit()
     sub = db.scalars(

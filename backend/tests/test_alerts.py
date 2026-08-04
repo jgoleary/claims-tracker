@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 from unittest.mock import MagicMock
 import pytest
 
-from app.alerts import compute_flags
+from app.alerts import compute_flags, compute_raw_flags
 from app import config
 
 
@@ -12,6 +12,9 @@ def _make_submission(submitted_date=None, expected_reimbursement=180_000, networ
     s.expected_reimbursement = expected_reimbursement
     s.network_treatment = network_treatment
     s.superseded_by_id = None
+    # MagicMock auto-creates truthy attributes, so the flag-suppressing fields must be
+    # nulled explicitly or every test below would short-circuit to no flags.
+    s.resolved_at = None
     return s
 
 
@@ -75,6 +78,23 @@ class TestComputeFlags:
         overdue = _make_submission(submitted_date=date.today() - timedelta(days=config.MISSING_DAYS + 1))
         overdue.superseded_by_id = "some-other-submission-id"
         assert compute_flags(overdue, match=None) == []
+
+    def test_resolved_submission_raises_no_flags(self):
+        # A manually resolved submission is silent even when its claim was overpaid
+        # (the case this exists for) and when a red flag would otherwise fire.
+        sub = _make_submission(expected_reimbursement=51_300)
+        sub.resolved_at = datetime(2026, 8, 4, 12, 0, 0)
+        overpaid = _make_match(status="Approved", plan_paid_val=68_400)
+        assert compute_flags(sub, match=overpaid) == []
+        assert compute_flags(sub, match=_make_match(status="Denied")) == []
+
+    def test_raw_flags_see_through_a_resolution(self):
+        # compute_raw_flags is what the reopen sweep compares against, so it has to
+        # report flags the user-facing compute_flags suppresses.
+        sub = _make_submission()
+        sub.resolved_at = datetime(2026, 8, 4, 12, 0, 0)
+        match = _make_match(status="Denied")
+        assert [f.flag for f in compute_raw_flags(sub, match=match)] == ["DENIED"]
 
     def test_underpaid_by_dollars(self):
         sub = _make_submission(expected_reimbursement=180_000)

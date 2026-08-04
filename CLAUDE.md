@@ -118,6 +118,23 @@ automatically writes a `ProviderAlias` row mapping `normalize(submission.provide
 Anthem (two-step Add Submission modal). The `UNSUBMITTED` info flag surfaces claims that
 have no `submitted_date`.
 
+### Manual resolution
+
+`resolved_at` marks a submission the user has closed out by hand — flags that are accurate
+but not actionable, e.g. an `OVERPAID` claim that would otherwise sit in the list forever.
+`compute_flags()` returns `[]` for a resolved submission (same early return as
+`superseded_by_id`), so it drops off the Dashboard and out of the "Hide resolved
+submissions" view. Set/cleared via `POST`/`DELETE /api/submissions/{id}/resolve`; the
+Resolve button and the Undo banner live on SubmissionDetail.
+
+A resolution is not permanent. `resolution.py:reopen_resolved()` runs after every claims
+ingest and clears `resolved_at` on any resolved submission whose current flags include a
+type that wasn't in `resolved_flags` — the comma-separated snapshot taken at resolve time.
+So an overpaid-and-resolved claim stays quiet while it's merely overpaid, and comes back
+if it turns `DENIED`, `UNDERPAID`, or `VANISHED`. `alerts.compute_raw_flags()` is the
+resolution-blind variant the sweep and the snapshot both use; `compute_flags()` wraps it
+with the suppression.
+
 ### Frontend (`frontend/src/`)
 
 - React 19 + TypeScript + Vite; Tailwind for styling.

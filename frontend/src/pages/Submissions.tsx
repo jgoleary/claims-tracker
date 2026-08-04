@@ -383,6 +383,9 @@ export default function Submissions() {
                       {sub.escalated_at && (
                         <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">Escalated</span>
                       )}
+                      {sub.resolved_at && (
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">Resolved</span>
+                      )}
                       {sub.superseded_by && (
                         <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">Deprecated</span>
                       )}
