@@ -63,6 +63,7 @@ class SubmissionResponse(BaseModel):
     pdf_path: Optional[str]
     notes: Optional[str]
     escalated_at: Optional[datetime] = None
+    resolved_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
     anthem_claim_number: Optional[str] = None

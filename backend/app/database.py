@@ -34,6 +34,12 @@ def _migrate(eng=engine) -> None:
         if "superseded_by_id" not in cols:
             with eng.begin() as conn:
                 conn.execute(text("ALTER TABLE submissions ADD COLUMN superseded_by_id VARCHAR"))
+        if "resolved_at" not in cols:
+            with eng.begin() as conn:
+                conn.execute(text("ALTER TABLE submissions ADD COLUMN resolved_at DATETIME"))
+        if "resolved_flags" not in cols:
+            with eng.begin() as conn:
+                conn.execute(text("ALTER TABLE submissions ADD COLUMN resolved_flags VARCHAR"))
 
 
 def init_db() -> None:

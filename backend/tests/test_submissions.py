@@ -178,6 +178,55 @@ def test_deleting_successor_clears_pointer(client: TestClient):
     assert any(f["flag"] == "MISSING" for f in old_after["flags"])  # interesting again
 
 
+def _make_flagged(client: TestClient):
+    """Create a submission overdue enough to raise the MISSING flag."""
+    from datetime import timedelta
+    from app import config
+    old_date = (date.today() - timedelta(days=config.MISSING_DAYS + 1)).isoformat()
+    return client.post(BASE, json={
+        **SUBMISSION_BODY, "service_date": old_date, "submitted_date": old_date,
+    }).json()
+
+
+def test_resolve_sets_timestamp_and_clears_flags(client: TestClient):
+    sub = _make_flagged(client)
+    assert any(f["flag"] == "MISSING" for f in sub["flags"])  # sanity: it was interesting
+
+    resp = client.post(f"{BASE}/{sub['id']}/resolve")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["resolved_at"] is not None
+    assert data["flags"] == []
+
+
+def test_resolved_submission_absent_from_dashboard(client: TestClient):
+    sub = _make_flagged(client)
+    before = client.get("/api/dashboard").json()
+    assert any(a["submission_id"] == sub["id"] for a in before["alerts"])
+
+    client.post(f"{BASE}/{sub['id']}/resolve")
+    after = client.get("/api/dashboard").json()
+    assert not any(a["submission_id"] == sub["id"] for a in after["alerts"])
+    assert after["counts"]["missing"] == 0
+
+
+def test_unresolve_restores_flags(client: TestClient):
+    sub = _make_flagged(client)
+    client.post(f"{BASE}/{sub['id']}/resolve")
+
+    resp = client.delete(f"{BASE}/{sub['id']}/resolve")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["resolved_at"] is None
+    assert any(f["flag"] == "MISSING" for f in data["flags"])
+
+
+def test_resolve_unknown_submission_404(client: TestClient):
+    missing_id = str(uuid.uuid4())
+    assert client.post(f"{BASE}/{missing_id}/resolve").status_code == 404
+    assert client.delete(f"{BASE}/{missing_id}/resolve").status_code == 404
+
+
 def test_extract_returns_not_configured_without_key(client, monkeypatch):
     # The key resolves Keychain -> env var, so neutralize both. Without the
     # Keychain stub this test fails on any machine that has a real key stored.

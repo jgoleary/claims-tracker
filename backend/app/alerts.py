@@ -25,13 +25,24 @@ def compute_flags(submission, match=None, latest_ingest_at: Optional[datetime] =
     last_seen_at predates it — i.e. it dropped out of Anthem's latest export — is
     flagged VANISHED.
     """
+    # A resolved submission has been manually closed out by the user; a superseded
+    # (deprecated) one has been followed up by another submission. Either way it is no
+    # longer "interesting" and raises no flags anywhere compute_flags is used.
+    # A resolution isn't permanent — app.resolution reopens it when new flags appear.
+    if getattr(submission, "resolved_at", None) or getattr(submission, "superseded_by_id", None):
+        return []
+    return compute_raw_flags(submission, match, latest_ingest_at=latest_ingest_at)
+
+
+def compute_raw_flags(submission, match=None, latest_ingest_at: Optional[datetime] = None) -> list[Alert]:
+    """The flags a submission raises on its merits, ignoring any manual resolution.
+
+    Callers wanting the user-visible flags want compute_flags. This variant exists for
+    the reopen sweep, which has to see through a resolution to decide whether it still
+    holds, and for capturing the flag snapshot at resolve time.
+    """
     alerts: list[Alert] = []
     today = date.today()
-
-    # A superseded (deprecated) submission has been followed up by another submission;
-    # it is no longer "interesting" and raises no flags anywhere compute_flags is used.
-    if getattr(submission, "superseded_by_id", None):
-        return alerts
 
     if match is None:
         if submission.submitted_date is None:

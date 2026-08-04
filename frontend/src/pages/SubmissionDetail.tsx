@@ -56,6 +56,16 @@ export default function SubmissionDetail() {
     onSuccess: invalidateAll,
   })
 
+  const resolveMutation = useMutation({
+    mutationFn: () => api.submissions.resolve(id!),
+    onSuccess: invalidateAll,
+  })
+
+  const unresolveMutation = useMutation({
+    mutationFn: () => api.submissions.unresolve(id!),
+    onSuccess: invalidateAll,
+  })
+
   if (isLoading) return <div className="text-gray-500">Loading…</div>
   if (!sub) return <div className="text-red-600">Submission not found</div>
 
@@ -69,14 +79,28 @@ export default function SubmissionDetail() {
             <button onClick={() => unmatchMutation.mutate()}
               className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50">Unmatch</button>
           )}
-          {!sub.superseded_by && (
-            <button onClick={() => setDeprecating(true)}
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50">Deprecate</button>
+          {!sub.resolved_at && !sub.superseded_by && (
+            <>
+              <button onClick={() => resolveMutation.mutate()} disabled={resolveMutation.isPending}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50">Resolve</button>
+              <button onClick={() => setDeprecating(true)}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50">Deprecate</button>
+            </>
           )}
           <button onClick={() => { if (window.confirm('Delete this submission?')) deleteMutation.mutate() }}
             className="px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700">Delete</button>
         </div>
       </div>
+      {sub.resolved_at && (
+        <div className="mb-6 flex items-center justify-between gap-4 bg-gray-100 border border-gray-200 rounded-lg px-4 py-3 text-sm">
+          <div className="text-gray-700">
+            Resolved {formatDate(sub.resolved_at)} — no further action needed. It raises no
+            alerts, and will reopen automatically if Anthem's data gives it a new flag.
+          </div>
+          <button onClick={() => unresolveMutation.mutate()} disabled={unresolveMutation.isPending}
+            className="shrink-0 px-3 py-1.5 text-sm border border-gray-300 rounded bg-white hover:bg-gray-50 disabled:opacity-50">Undo</button>
+        </div>
+      )}
       {sub.superseded_by && (
         <div className="mb-6 flex items-center justify-between gap-4 bg-gray-100 border border-gray-200 rounded-lg px-4 py-3 text-sm">
           <div className="text-gray-700">

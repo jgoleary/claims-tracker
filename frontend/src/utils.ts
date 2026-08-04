@@ -6,11 +6,11 @@ export function formatCents(cents: number): string {
 
 /** A submission is "interesting" (worth reviewing) unless it's settled —
  *  i.e. matched to an Approved Anthem claim with no flags — or it has been
- *  deprecated (superseded by a follow-up submission). */
+ *  manually resolved, or deprecated (superseded by a follow-up submission). */
 export function isInterestingSubmission(
-  s: Pick<SubmissionResponse, 'anthem_claim_status' | 'flags' | 'superseded_by'>,
+  s: Pick<SubmissionResponse, 'anthem_claim_status' | 'flags' | 'superseded_by' | 'resolved_at'>,
 ): boolean {
-  if (s.superseded_by) return false
+  if (s.resolved_at || s.superseded_by) return false
   return s.anthem_claim_status !== 'Approved' || s.flags.length > 0
 }
 

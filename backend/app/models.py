@@ -34,6 +34,11 @@ class Submission(Base):
     pdf_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     escalated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Comma-separated flag names that were current when the user resolved this
+    # submission — the baseline app.resolution compares against to decide whether a
+    # newly appearing flag should reopen it.
+    resolved_flags: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     superseded_by_id: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("submissions.id"), nullable=True
     )

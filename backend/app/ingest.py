@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models import AnthemClaim, BenefitsSnapshot
 from app.matching import run_matching, MatchResult
+from app.resolution import reopen_resolved
 
 
 def _parse_money(s: str) -> int:
@@ -115,6 +116,8 @@ def ingest_claims_csv(db: Session, csv_bytes: bytes) -> IngestResult:
     db.commit()
 
     match_result = run_matching(db)
+    # New data may have made a resolved submission interesting again.
+    reopen_resolved(db)
     return IngestResult(
         new=new_count,
         updated=updated_count,

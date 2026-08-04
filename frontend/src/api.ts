@@ -42,6 +42,10 @@ export const api = {
       }),
     unsupersede: (id: string) =>
       req<SubmissionResponse>(`/submissions/${id}/supersede`, { method: 'DELETE' }),
+    resolve: (id: string) =>
+      req<SubmissionResponse>(`/submissions/${id}/resolve`, { method: 'POST' }),
+    unresolve: (id: string) =>
+      req<SubmissionResponse>(`/submissions/${id}/resolve`, { method: 'DELETE' }),
     uploadPdf: (id: string, file: File) => {
       const fd = new FormData()
       fd.append('file', file)
