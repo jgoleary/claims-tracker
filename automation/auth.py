@@ -2,6 +2,7 @@
 import getpass
 import os
 import sys
+import time
 
 from playwright.sync_api import BrowserContext, Page, Playwright
 
@@ -70,14 +71,67 @@ def check_for_site_error(page: Page) -> None:
 
 
 
+# Markers that Anthem has served a signed-in page.
+_SESSION_SELECTORS = [
+    'a:has-text("Log Out")',
+    'button:has-text("Log Out")',
+    'a:has-text("Log out")',
+]
+
+# The Okta identifier field — i.e. we really do have to log in.
+_IDENTIFIER_SELECTORS = [
+    'input[name="identifier"]',
+    'input[type="email"]',
+    'input[name="username"]',
+    'input[id="username"]',
+    'input[placeholder*="username" i]',
+    'input[placeholder*="email" i]',
+]
+
+
+def _any_present(page: Page, selectors: list[str]) -> bool:
+    for sel in selectors:
+        try:
+            if page.locator(sel).count() > 0:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def wait_for_login_or_session(page: Page, timeout_ms: int = 15_000, poll_ms: int = 500,
+                              clock=time.monotonic) -> str:
+    """Return "session" if we're already signed in, else "form".
+
+    The URL is NOT a usable signal here: an already-authenticated session is
+    served the member dashboard *at* https://www.anthem.com/login, so page.url
+    still contains "login" while the page is plainly signed in and has no form
+    inputs at all. Key off content instead — the same lesson as
+    ih_auth._form_ready. Falls back to "form" if neither settles, so an
+    unrecognized page behaves as it always did and the form flow raises its own
+    clear error.
+    """
+    if "/member/" in page.url and "auth-redirect" not in page.url:
+        return "session"
+
+    deadline = clock() + timeout_ms / 1000
+    while True:
+        if _any_present(page, _SESSION_SELECTORS):
+            return "session"
+        if _any_present(page, _IDENTIFIER_SELECTORS):
+            return "form"
+        if clock() >= deadline:
+            return "form"
+        page.wait_for_timeout(poll_ms)
+
+
 def login(page: Page, username: str, password: str, mfa_timeout: int = 120_000) -> None:
     """Navigate to login, fill credentials, wait up to mfa_timeout ms for MFA completion.
     If a valid session cookie already exists, skips the login form entirely."""
     print("Opening Anthem login page…")
     page.goto(ANTHEM_LOGIN_URL, wait_until="load", timeout=30_000)
 
-    # Already authenticated from a previous run — the login page will redirect us.
-    if "/member/" in page.url and "auth-redirect" not in page.url and "login" not in page.url:
+    if wait_for_login_or_session(page) == "session":
         print("Session still active — skipping login.")
         return
 

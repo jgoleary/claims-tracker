@@ -35,6 +35,10 @@ QUESTIONNAIRE_URL = "https://membersecure.anthem.com/member/claims/submission-qu
 # wait and the processing poll) below _FILING_TIMEOUT_S in
 # backend/app/automation.py so we exit cleanly rather than being killed.
 _HANDOFF_TIMEOUT_MS = 900_000  # 15 min
+# A failed run leaves the window open so the user can see what happened and
+# finish by hand — but only briefly. Reusing the 15-minute handoff hold here
+# turned a 60-second auth error into a 16-minute silent hang.
+_ERROR_REVIEW_TIMEOUT_MS = 180_000  # 3 min
 # The questionnaire page must actually render. Generous because auth.login can
 # return early on an expired-but-cookied session — this is where the user gets
 # time to sign in in the open window.
@@ -66,9 +70,19 @@ _UPLOAD_BUTTON = ["Select Document(s) to Upload", "Select Documents to Upload", 
 # than polling for the full processing timeout.
 _UPLOAD_REJECTED = ("could not be processed", "upload failed", "unsupported file")
 
+# Anthem refuses to start a new claim while an unfinished draft exists and
+# diverts the wizard to the draft list. Every abandoned run leaves one behind,
+# so this is a routine state, not an exotic one — detect it and say so rather
+# than timing out on whichever page we were expecting.
+_DRAFT_BLOCK = "continue or delete your draft submissions"
+
 
 class AmbiguousPatientError(RuntimeError):
     """Zero or 2+ dropdown options matched the member — refuse to guess."""
+
+
+class DraftSubmissionBlockedError(RuntimeError):
+    """An unfinished draft in Anthem is blocking any new claim."""
 
 
 # ── Patient matching (pure, unit-tested) ─────────────────────────────────────
@@ -156,6 +170,17 @@ def _body_text(page: Page) -> str:
         return ""
 
 
+def _raise_if_draft_blocked(body: str) -> None:
+    """Anthem parks the wizard on the draft list instead of the page we wanted."""
+    if _DRAFT_BLOCK in body:
+        raise DraftSubmissionBlockedError(
+            "Anthem has an unfinished draft submission and won't start a new claim "
+            "until it's dealt with. Open the Claim Submission Center in the browser "
+            "window and either Continue that draft (to finish it) or Delete it, then "
+            "run this again."
+        )
+
+
 def _wait_for_page(page: Page, needle: str, what: str, timeout_ms: int = 30_000,
                    poll_ms: int = 500, clock=time.monotonic) -> None:
     """Block until `needle` appears in the page body.
@@ -168,8 +193,10 @@ def _wait_for_page(page: Page, needle: str, what: str, timeout_ms: int = 30_000,
     deadline = clock() + timeout_ms / 1000
     key = needle.lower()
     while True:
-        if key in _body_text(page):
+        body = _body_text(page)
+        if key in body:
             return
+        _raise_if_draft_blocked(body)
         if clock() >= deadline:
             raise RuntimeError(
                 f"Timed out waiting for {what} (looking for {needle!r}) after "
@@ -366,8 +393,9 @@ def fill_wizard(page: Page, member: str, pdf_path: str, dry_run: bool = False) -
     _wait_for_page(page, "Patient Name", "the Patient Name page")
     _select_patient(page, member)
     if dry_run:
+        # Exit immediately rather than holding the window: a dry run exists to
+        # iterate on selectors, so it must not block for the handoff period.
         print("CLAIM_DRY_RUN=1 — stopping before 'Submit a Claim'. Nothing was filed.")
-        _wait_for_close(page)
         return
     _click_button(page, _SUBMIT_A_CLAIM, "the Submit a Claim button")
 
@@ -425,6 +453,9 @@ def main() -> int:
         else:
             try:
                 fill_wizard(page, member, pdf_path, dry_run=dry_run)
+            except DraftSubmissionBlockedError as e:
+                print(f"[draft] ERROR: {e}")
+                errors.append(f"draft: {e}")
             except AmbiguousPatientError as e:
                 print(f"[patient] ERROR: {e}")
                 errors.append(f"patient: {e}")
@@ -436,8 +467,12 @@ def main() -> int:
         # open so the user can see what happened and finish by hand.
         if errors:
             _save_error_screenshot(page)
-            print("Leaving the browser open — finish in the window, then close it.")
-            _wait_for_close(page)
+            print(
+                "Leaving the browser open for "
+                f"{_ERROR_REVIEW_TIMEOUT_MS // 60_000} minutes — finish in the window, "
+                "or close it to exit now."
+            )
+            _wait_for_close(page, timeout_ms=_ERROR_REVIEW_TIMEOUT_MS)
 
         try:
             context.close()

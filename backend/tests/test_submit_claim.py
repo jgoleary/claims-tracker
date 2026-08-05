@@ -322,6 +322,25 @@ def test_patient_selection_that_does_not_take_effect_raises():
         submit_claim.fill_wizard(page, "Nolan", PDF)
 
 
+def test_draft_block_raises_immediately_instead_of_timing_out():
+    """Anthem diverts the wizard to its draft list when an unfinished draft
+    exists; that must be reported, not waited out."""
+    bodies = list(HAPPY_BODIES)
+    bodies[2] = ("Claims Submission Center You must continue or delete your draft "
+                 "submissions before you can submit a new claim Draft Submission")
+    page = _FakePage(bodies, selectors=dict(NATIVE_SELECT))
+    with pytest.raises(submit_claim.DraftSubmissionBlockedError, match="Continue that draft"):
+        submit_claim.fill_wizard(page, "Nolan", PDF)
+    assert ("click", "Submit a Claim") not in page.log
+
+
+def test_draft_block_detected_while_waiting_for_any_page():
+    page = _FakePage(["You must continue or delete your draft submissions first"])
+    with pytest.raises(submit_claim.DraftSubmissionBlockedError):
+        submit_claim._wait_for_page(page, "Get Started", "the start page",
+                                    timeout_ms=60_000, poll_ms=1, clock=lambda: 0.0)
+
+
 def test_wait_for_page_times_out_naming_the_script():
     page = _FakePage(["nothing useful here"])
     ticks = iter(range(0, 1000))

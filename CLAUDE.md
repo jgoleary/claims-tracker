@@ -163,6 +163,16 @@ ever filed without a human.
   against the real site with no side effects.
 - Every wizard step is gated on its page heading (`_wait_for_page`) before acting: four
   pages carry a "Next" button, so acting before the SPA navigates silently skips a step.
+- **Anthem allows only one draft claim at a time.** Any abandoned or failed run leaves a
+  draft behind, and Anthem then refuses to start a new claim ("You must continue or delete
+  your draft submissions before you can submit a new claim"), diverting the wizard to the
+  draft list. `_wait_for_page` watches for that text on every poll and raises
+  `DraftSubmissionBlockedError` immediately rather than timing out on whichever page it
+  was expecting. Clear the draft (Continue or Delete) in the Claim Submission Center, then
+  retry. Expect to hit this regularly while iterating.
+- Only the real handoff holds the window for 15 minutes. A failed run holds it for 3
+  (`_ERROR_REVIEW_TIMEOUT_MS`) and says so; a dry run doesn't hold it at all, so selector
+  iteration stays fast.
 
 ### Manual resolution
 

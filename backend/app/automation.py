@@ -343,6 +343,9 @@ def _classify_escalation_failure(summary: dict) -> str:
 def _classify_claim_filing_failure(summary: dict) -> str:
     """Turn the script's "stage: msg" output into an actionable notification."""
     text = (summary.get("stdout", "") + summary.get("stderr", "")).lower()
+    if "draft:" in text or "unfinished draft submission" in text:
+        return ("Anthem has an unfinished draft claim blocking new submissions — "
+                "continue or delete it in the browser window, then retry.")
     if "patient:" in text or "could not pick the patient" in text:
         return ("Couldn't pick the patient on Anthem — choose it in the open browser "
                 "window and finish there.")

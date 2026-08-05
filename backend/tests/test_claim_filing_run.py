@@ -128,6 +128,23 @@ def test_failure_writes_failed_and_notifies(monkeypatch):
     assert "choose it in the open browser" in notes[0]
 
 
+def test_draft_block_failure_is_classified(monkeypatch):
+    _idle(monkeypatch)
+    notes: list[str] = []
+    _run(monkeypatch)
+    monkeypatch.setattr(_auto, "notify", lambda title, msg: notes.append(msg))
+    monkeypatch.setattr(
+        _auto.subprocess, "run",
+        lambda *a, **k: MagicMock(
+            returncode=1,
+            stdout="[draft] ERROR: Anthem has an unfinished draft submission",
+            stderr="",
+        ))
+
+    assert _auto.run_claim_filing("sub-1", "Nolan", "sub-1/claim.pdf") is True
+    assert "continue or delete it" in notes[0]
+
+
 def test_env_vars_passed_to_script(monkeypatch):
     _idle(monkeypatch)
     _run(monkeypatch)
