@@ -8,6 +8,7 @@ from app.static_serve import create_spa_router
 from app.routes import (
     anthem_claims,
     automation,
+    claim_filing,
     dashboard,
     escalations,
     ingest,
@@ -36,6 +37,7 @@ app.include_router(dashboard.router, prefix="/api")
 app.include_router(totals.router, prefix="/api")
 app.include_router(automation.router, prefix="/api")
 app.include_router(escalations.router, prefix="/api")
+app.include_router(claim_filing.router, prefix="/api")
 app.include_router(providers.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
 

@@ -237,6 +237,15 @@ class EscalationStatus(BaseModel):
     summary: Optional[dict[str, Any]]
 
 
+# ── Claim filing (Anthem wizard) ─────────────────────────────────────────────
+
+class ClaimFilingStatus(BaseModel):
+    status: Literal["idle", "running", "complete", "failed"]
+    submission_id: Optional[str] = None
+    last_run_at: Optional[datetime]
+    summary: Optional[dict[str, Any]]
+
+
 # ── Providers ────────────────────────────────────────────────────────────────
 
 class ProviderAliasResponse(BaseModel):

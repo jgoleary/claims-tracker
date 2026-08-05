@@ -1,5 +1,6 @@
 import type {
-  AnthemClaimResponse, AnthropicKeyStatus, AutomationStatus, DashboardResponse,
+  AnthemClaimResponse, AnthropicKeyStatus, AutomationStatus, ClaimFilingStatus,
+  DashboardResponse,
   EscalationDraft, EscalationStatus, ExtractionResult, IngestSummary, MatchSuggestion,
   PlanConfig, ProviderAliasResponse, SubmissionCreate, SubmissionResponse, TotalsResponse,
 } from './types'
@@ -118,6 +119,15 @@ export const api = {
         body: JSON.stringify({ message }),
       }),
     status: () => req<EscalationStatus>('/escalations/status'),
+  },
+  claimFiling: {
+    run: (id: string) =>
+      req<{ detail: string }>(`/submissions/${id}/file-with-anthem/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      }),
+    status: () => req<ClaimFilingStatus>('/claim-filing/status'),
   },
   providers: {
     aliases: () => req<ProviderAliasResponse[]>('/providers/aliases'),
