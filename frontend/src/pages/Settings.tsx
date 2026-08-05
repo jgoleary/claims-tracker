@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
 import { useRedact } from '../context/RedactContext'
@@ -14,21 +14,15 @@ export default function Settings() {
 
   const { data: planConfig } = useQuery({ queryKey: ['planConfig'], queryFn: api.planConfig.get })
   const { data: anthropicKey } = useQuery({ queryKey: ['anthropicKey'], queryFn: api.settings.anthropicKeyStatus })
-  const [inPct, setInPct] = useState(10)
-  const [oonPct, setOonPct] = useState(30)
-  const [configDirty, setConfigDirty] = useState(false)
-
-  useEffect(() => {
-    if (planConfig) {
-      setInPct(planConfig.in_network_coinsurance_pct)
-      setOonPct(planConfig.out_of_network_coinsurance_pct)
-      setConfigDirty(false)
-    }
-  }, [planConfig])
+  // Unsaved edits live in `draft`; null means "show whatever the server has".
+  const [draft, setDraft] = useState<{ inPct: number; oonPct: number } | null>(null)
+  const inPct = draft?.inPct ?? planConfig?.in_network_coinsurance_pct ?? 10
+  const oonPct = draft?.oonPct ?? planConfig?.out_of_network_coinsurance_pct ?? 30
+  const configDirty = draft !== null
 
   const configMutation = useMutation({
     mutationFn: () => api.planConfig.update({ in_network_coinsurance_pct: inPct, out_of_network_coinsurance_pct: oonPct }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['planConfig'] }); setConfigDirty(false) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['planConfig'] }); setDraft(null) },
   })
 
   return (
@@ -83,7 +77,7 @@ export default function Settings() {
             <label className="text-sm text-gray-700">In-Network Coinsurance</label>
             <div className="flex items-center gap-1">
               <input type="number" min={0} max={100} value={inPct}
-                onChange={e => { setInPct(Number(e.target.value)); setConfigDirty(true) }}
+                onChange={e => setDraft({ inPct: Number(e.target.value), oonPct })}
                 className="w-16 border rounded px-2 py-1 text-sm text-right" />
               <span className="text-sm text-gray-500">%</span>
             </div>
@@ -92,7 +86,7 @@ export default function Settings() {
             <label className="text-sm text-gray-700">Out-of-Network Coinsurance</label>
             <div className="flex items-center gap-1">
               <input type="number" min={0} max={100} value={oonPct}
-                onChange={e => { setOonPct(Number(e.target.value)); setConfigDirty(true) }}
+                onChange={e => setDraft({ inPct, oonPct: Number(e.target.value) })}
                 className="w-16 border rounded px-2 py-1 text-sm text-right" />
               <span className="text-sm text-gray-500">%</span>
             </div>

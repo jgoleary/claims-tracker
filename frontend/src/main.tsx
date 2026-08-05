@@ -4,8 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App'
-import { YearProvider } from './context/YearContext'
-import { RedactProvider } from './context/RedactContext'
+import { YearProvider } from './context/YearProvider'
+import { RedactProvider } from './context/RedactProvider'
 
 const queryClient = new QueryClient({
   defaultOptions: {

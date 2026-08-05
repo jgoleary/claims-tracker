@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
@@ -65,44 +65,43 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (isEdit || expectedDirty || !totals || !planConfig) return
+  // Network defaults to the provider's most recently used value (network is a
+  // near-constant property of a provider). Skips edits and any manual override.
+  const providerNetwork = !isEdit && !networkDirty
+    ? (networkDefaults?.[normalizeProvider(form.provider_name)] as SubmissionCreate['network_treatment'] | undefined)
+    : undefined
+  const networkTreatment = providerNetwork ?? form.network_treatment
+
+  // Expected reimbursement is derived from billed + remaining benefits until the
+  // user types over it (or we're editing an existing submission).
+  const autoExpected = useMemo(() => {
+    if (isEdit || !totals || !planConfig) return null
     const billed = Math.round((parseFloat(form.amount_billed) || 0) * 100)
-    if (!billed) return
-    const oon = form.network_treatment === 'out_of_network'
+    if (!billed) return null
+    const oon = networkTreatment === 'out_of_network'
     const benefits = oon ? totals.out_of_network.benefits : totals.in_network.benefits
-    if (!benefits) return
+    if (!benefits) return null
     const dedRemaining = benefits.deductible_limit - benefits.deductible_spent
     const oopRemaining = benefits.oop_limit - benefits.oop_spent
     const pct = (oon ? planConfig.out_of_network_coinsurance_pct : planConfig.in_network_coinsurance_pct) / 100
-    const expected = computeExpected(billed, dedRemaining, oopRemaining, pct)
-    setForm((p) => ({ ...p, expected_reimbursement: (expected / 100).toFixed(2) }))
-  }, [form.amount_billed, form.network_treatment, totals, planConfig, isEdit, expectedDirty])
-
-  // Default Network to the provider's most recently used value (network is a
-  // near-constant property of a provider). Skips edits and any manual override.
-  useEffect(() => {
-    if (isEdit || networkDirty || !networkDefaults) return
-    const last = networkDefaults[normalizeProvider(form.provider_name)]
-    if (last && last !== form.network_treatment) {
-      setForm((p) => ({ ...p, network_treatment: last as SubmissionCreate['network_treatment'] }))
-    }
-  }, [form.provider_name, form.network_treatment, networkDefaults, isEdit, networkDirty])
+    return (computeExpected(billed, dedRemaining, oopRemaining, pct) / 100).toFixed(2)
+  }, [form.amount_billed, networkTreatment, totals, planConfig, isEdit])
+  const expectedReimbursement = !expectedDirty && autoExpected !== null ? autoExpected : form.expected_reimbursement
 
   const mutation = useMutation({
     mutationFn: async () => {
       const dollars = {
         amount_billed: Math.round((parseFloat(form.amount_billed) || 0) * 100),
-        expected_reimbursement: Math.round((parseFloat(form.expected_reimbursement) || 0) * 100),
+        expected_reimbursement: Math.round((parseFloat(expectedReimbursement) || 0) * 100),
       }
       if (isEdit) {
-        return api.submissions.update(initial!.id, { ...form, ...dollars })
+        return api.submissions.update(initial!.id, { ...form, network_treatment: networkTreatment, ...dollars })
       } else {
         const body: SubmissionCreate = {
           member_name: form.member_name,
           provider_name: form.provider_name,
           service_date: form.service_date,
-          network_treatment: form.network_treatment,
+          network_treatment: networkTreatment,
           submission_method: form.submission_method,
           notes: form.notes,
           ...dollars,
@@ -202,7 +201,7 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Expected ($)</label>
-            <input type="number" step="0.01" value={form.expected_reimbursement}
+            <input type="number" step="0.01" value={expectedReimbursement}
               onChange={(e) => { setExpectedDirty(true); setForm((p) => ({ ...p, expected_reimbursement: e.target.value })) }}
               className="w-full border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
@@ -210,7 +209,7 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Network</label>
-            <select value={form.network_treatment}
+            <select value={networkTreatment}
               onChange={(e) => { setNetworkDirty(true); setForm((p) => ({ ...p, network_treatment: e.target.value as SubmissionCreate['network_treatment'] })) }}
               className="w-full border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="out_of_network">Out-of-Network</option>
