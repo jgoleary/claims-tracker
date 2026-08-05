@@ -1,20 +1,49 @@
 """Shared credential loading and Anthem login flow."""
 import getpass
 import os
+import sys
 
 from playwright.sync_api import BrowserContext, Page, Playwright
 
 from pathlib import Path
 
 _PROFILE_DIR = Path(__file__).parent.parent / "data" / "browser-profile"
+_BACKEND_DIR = Path(__file__).parent.parent / "backend"
 
 ANTHEM_LOGIN_URL = "https://www.anthem.com/login"
 MEMBER_URL_PATTERN = "**/member/**"
 
 
+def keychain_credentials() -> tuple[str, str] | None:
+    """The Anthem credentials the backend stores in the macOS Keychain, if any.
+
+    Only reached on manual runs: when the backend spawns these scripts it
+    resolves the Keychain itself and injects ANTHEM_USERNAME/ANTHEM_PASSWORD.
+    Any failure (no keyring, locked Keychain, nothing stored) is treated as
+    "not available" so we fall through to prompting.
+    """
+    try:
+        sys.path.insert(0, str(_BACKEND_DIR))
+        from app import credentials
+
+        return credentials.get_credentials()
+    except Exception:
+        return None
+
+
 def get_credentials() -> tuple[str, str]:
-    username = os.environ.get("ANTHEM_USERNAME") or input("Anthem email: ").strip()
-    password = os.environ.get("ANTHEM_PASSWORD") or getpass.getpass("Anthem password: ")
+    """Resolve credentials: env vars → macOS Keychain → interactive prompt."""
+    username = os.environ.get("ANTHEM_USERNAME")
+    password = os.environ.get("ANTHEM_PASSWORD")
+    if username and password:
+        return username, password
+
+    stored = keychain_credentials()
+    if stored:
+        return stored
+
+    username = username or input("Anthem email: ").strip()
+    password = password or getpass.getpass("Anthem password: ")
     return username, password
 
 

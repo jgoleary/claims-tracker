@@ -212,11 +212,14 @@ Playwright scripts that log into Anthem and pull data. Dependencies are in the *
 venv** (`playwright` and `requests` are in `backend/requirements.txt`) — no separate venv
 needed.
 
-- **`auth.py`** — `get_credentials()` reads `ANTHEM_USERNAME`/`ANTHEM_PASSWORD` env vars
-  first, then falls back to interactive prompts. `login(page, user, pass)` handles
-  Anthem's Okta SSO (two-step: identifier → Next → password → submit → MFA wait). Browser
-  opens non-headless for MFA. Session cookies persist in `data/browser-profile/` so MFA is
-  only required once (until the Okta session expires).
+- **`auth.py`** — `get_credentials()` resolves **env vars
+  (`ANTHEM_USERNAME`/`ANTHEM_PASSWORD`) → macOS Keychain → interactive prompt**. The
+  backend always injects the env vars when it spawns a script, so the Keychain step exists
+  for manual runs (`python automation/submit_claim.py`), which would otherwise die with
+  `EOFError` on the prompt when there's no TTY. `login(page, user, pass)` handles Anthem's
+  Okta SSO (two-step: identifier → Next → password → submit → MFA wait). Browser opens
+  non-headless for MFA. Session cookies persist in `data/browser-profile/` so MFA is only
+  required once (until the Okta session expires).
 - **`fetch_claims.py`** — navigates to the claims summary page, clicks Export, saves
   `data/exports/claims-YYYY-MM-DD-HHMM.csv`, POSTs to `/api/ingest/claims-csv`.
 - **`fetch_benefits.py`** — navigates to the benefits page, reads `#ant-tab-body-1-0`
