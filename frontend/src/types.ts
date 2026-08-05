@@ -154,6 +154,13 @@ export interface EscalationStatus {
   summary: Record<string, unknown> | null
 }
 
+export interface ClaimFilingStatus {
+  status: 'idle' | 'running' | 'complete' | 'failed'
+  submission_id: string | null
+  last_run_at: string | null
+  summary: Record<string, unknown> | null
+}
+
 export interface ProviderAliasResponse {
   id: number
   canonical_name: string

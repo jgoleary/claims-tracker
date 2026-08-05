@@ -85,10 +85,18 @@ npm run lint
 - **`storage.py`** — `Storage` ABC with `LocalFileStorage` impl. PDF files stored under
   `data/pdfs/`. The `pdf_path` column is a storage key, not a raw filesystem path. Swap to
   S3 by implementing `Storage` and calling `set_storage()`.
-- **`automation.py`** — runs `automation/fetch_all.py` as a subprocess (using
-  `sys.executable` so it shares the backend venv) in a background thread, tracking status
-  in `data/state.json`. Accepts `username`/`password` and passes them as env vars to the
-  subprocess — credentials are never written to disk.
+- **`automation.py`** — runs the Playwright scripts as subprocesses (using
+  `sys.executable` so they share the backend venv) in background threads. Three jobs, each
+  with its own state file: `run_automation()` → `fetch_all.py` / `data/state.json`,
+  `run_escalation()` → `ih_escalate.py` / `data/escalation_state.json`, and
+  `run_claim_filing()` → `submit_claim.py` / `data/claim_filing_state.json`.
+  `run_automation` accepts `username`/`password` and passes them as env vars to the
+  subprocess — credentials are never written to disk. All three share `_run_subprocess()`
+  (which normalizes the outcome to `(status, summary)`) and one `_any_running()`
+  single-flight guard: the jobs run headfully out of the same browser profile, so only one
+  may run at a time. `_materialize_pdf()` writes a submission's stored PDF to a temp dir
+  under its **original basename** (so an uploaded file isn't named `tmp8f3a91.pdf`);
+  `_cleanup_pdf()` removes it afterwards.
 - **`config.py`** — `plan_year_dates(year: int) -> (date, date)` returns Jan 1 / Dec 31
   for any calendar year. All list/totals endpoints accept a `year` query param (defaults
   to current year).
@@ -125,6 +133,46 @@ automatically writes a `ProviderAlias` row mapping `normalize(submission.provide
 `submitted_date` is nullable and is set when the user confirms the claim was uploaded to
 Anthem (two-step Add Submission modal). The `UNSUBMITTED` info flag surfaces claims that
 have no `submitted_date`.
+
+Creating a submission now drives Anthem's claim wizard automatically (see Anthem claim
+filing), but only as far as the upload step — the automation never concludes that a claim
+was filed, so `submitted_date` is still set only by the user's own confirmation.
+
+### Anthem claim filing
+
+`automation/submit_claim.py` drives Anthem's out-of-network medical claim wizard: Medical
+→ "Doctor or other medical specialist" → patient → requirements → upload the PDF → wait
+out Anthem's file processing. It then **stops at "Step 3 of 5"** and holds the browser
+open (15 min) for the user to complete the remaining steps and click Submit. Nothing is
+ever filed without a human.
+
+- Triggered from the Add Submission modal's step-2 screen (which is the **only** warning
+  that the user must finish in the browser — there is deliberately no notification or
+  injected page banner), and from the "File with Anthem" row action on the Submissions
+  table, shown when a submission has a PDF and no `submitted_date`. That row action is
+  also the retry path after a failed or refused run.
+- A PDF is mandatory: the Add Submission button is disabled without one, and
+  `POST /api/submissions/{id}/file-with-anthem/run` 400s if `pdf_path` is unset.
+- Patient selection compares the submission's `member_name` against the dropdown's
+  `FIRST M LAST (MM/DD/YYYY)` options via `_normalize_name` / `match_patient_options`
+  (surnames compared only when both sides have one). Zero or 2+ matches raises
+  `AmbiguousPatientError` — the script refuses to guess, fails the run, and leaves the
+  browser open on the dropdown.
+- `CLAIM_DRY_RUN=1` stops before "Submit a Claim", the last point before Anthem creates
+  any server-side state — use it to exercise login, steps 1-3 and the patient matcher
+  against the real site with no side effects.
+- Every wizard step is gated on its page heading (`_wait_for_page`) before acting: four
+  pages carry a "Next" button, so acting before the SPA navigates silently skips a step.
+- **Anthem allows only one draft claim at a time.** Any abandoned or failed run leaves a
+  draft behind, and Anthem then refuses to start a new claim ("You must continue or delete
+  your draft submissions before you can submit a new claim"), diverting the wizard to the
+  draft list. `_wait_for_page` watches for that text on every poll and raises
+  `DraftSubmissionBlockedError` immediately rather than timing out on whichever page it
+  was expecting. Clear the draft (Continue or Delete) in the Claim Submission Center, then
+  retry. Expect to hit this regularly while iterating.
+- Only the real handoff holds the window for 15 minutes. A failed run holds it for 3
+  (`_ERROR_REVIEW_TIMEOUT_MS`) and says so; a dry run doesn't hold it at all, so selector
+  iteration stays fast.
 
 ### Manual resolution
 
@@ -174,11 +222,14 @@ Playwright scripts that log into Anthem and pull data. Dependencies are in the *
 venv** (`playwright` and `requests` are in `backend/requirements.txt`) — no separate venv
 needed.
 
-- **`auth.py`** — `get_credentials()` reads `ANTHEM_USERNAME`/`ANTHEM_PASSWORD` env vars
-  first, then falls back to interactive prompts. `login(page, user, pass)` handles
-  Anthem's Okta SSO (two-step: identifier → Next → password → submit → MFA wait). Browser
-  opens non-headless for MFA. Session cookies persist in `data/browser-profile/` so MFA is
-  only required once (until the Okta session expires).
+- **`auth.py`** — `get_credentials()` resolves **env vars
+  (`ANTHEM_USERNAME`/`ANTHEM_PASSWORD`) → macOS Keychain → interactive prompt**. The
+  backend always injects the env vars when it spawns a script, so the Keychain step exists
+  for manual runs (`python automation/submit_claim.py`), which would otherwise die with
+  `EOFError` on the prompt when there's no TTY. `login(page, user, pass)` handles Anthem's
+  Okta SSO (two-step: identifier → Next → password → submit → MFA wait). Browser opens
+  non-headless for MFA. Session cookies persist in `data/browser-profile/` so MFA is only
+  required once (until the Okta session expires).
 - **`fetch_claims.py`** — navigates to the claims summary page, clicks Export, saves
   `data/exports/claims-YYYY-MM-DD-HHMM.csv`, POSTs to `/api/ingest/claims-csv`.
 - **`fetch_benefits.py`** — navigates to the benefits page, reads `#ant-tab-body-1-0`
@@ -187,9 +238,17 @@ needed.
   `span:has-text("Your limit is $")`. POSTs to `/api/ingest/benefits`.
 - **`fetch_all.py`** — single login, runs both scripts. Spawned by
   `POST /api/automation/run`.
+- **`submit_claim.py`** — drives Anthem's claim-submission wizard through the PDF upload,
+  then stops and hands the browser to the user (see Anthem claim filing). Reuses
+  `auth.login()` and `auth.launch_context()`, so it shares the refresh flow's session and
+  MFA. Inputs are `CLAIM_SUBMISSION_ID` / `CLAIM_MEMBER` / `CLAIM_PDF_PATH` /
+  `CLAIM_DRY_RUN` env vars. Spawned by `POST /api/submissions/{id}/file-with-anthem/run`.
 
 **Selector maintenance:** If Anthem changes their UI, update `_EXPORT_SELECTORS` in
-`fetch_claims.py` or the tab/amount selectors in `fetch_benefits.py`.
+`fetch_claims.py`, the tab/amount selectors in `fetch_benefits.py`, or the
+`_MEDICAL_GET_STARTED` / `_PATIENT_SELECT` / `_PATIENT_TRIGGER` / `_UPLOAD_BUTTON`
+constants (and the `_wait_for_page` heading needles) in `submit_claim.py`. Every failure
+message names the file and constant to edit.
 
 ### Credentials (macOS Keychain)
 
@@ -216,6 +275,12 @@ needed.
   `_classify_failure()` distinguishes an **MFA-needed** failure (auth-step timeout) from a
   generic failure.
 - After a run, stdout/stderr from the script is shown in the UI so failures are visible.
+- **One browser job at a time.** The refresh, escalation and claim-filing jobs all run
+  headfully out of a shared browser profile and share `_any_running()`, so a second job is
+  refused with a 202 + `{"detail": "Automation already running"}`. A claim-filing run can
+  hold that lock for up to 30 minutes (it waits out the user's 15-minute handoff), which
+  means a daily refresh firing inside that window is skipped until its next tick. A
+  crashed job auto-clears after its timeout + `_STALE_MARGIN_S`.
 - The app runs over plain HTTP on localhost, which is acceptable for local-only use. The
   only plaintext-over-localhost surface is the CSV upload (no credentials). If ever
   exposed beyond localhost, add TLS.
@@ -223,9 +288,10 @@ needed.
 ### Data directory
 
 `data/` is gitignored and holds the SQLite DB (`data/claims.db`), PDF uploads
-(`data/pdfs/`), automation state (`data/state.json`), browser session
-(`data/browser-profile/`), Playwright exports (`data/exports/`), and deployment logs
-(`data/logs/`).
+(`data/pdfs/`), automation state (`data/state.json`, `data/escalation_state.json`,
+`data/claim_filing_state.json`), browser session (`data/browser-profile/`), Playwright
+exports (`data/exports/`), failure screenshots (`data/ih_last_error.png`,
+`data/claim_filing_last_error.png`), and deployment logs (`data/logs/`).
 
 ### Deployment (`deploy/`)
 

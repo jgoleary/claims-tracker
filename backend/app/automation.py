@@ -12,13 +12,18 @@ from app.storage import get_storage
 
 _STATE_FILE = Path(__file__).parent.parent.parent / "data" / "state.json"
 _ESC_STATE_FILE = Path(__file__).parent.parent.parent / "data" / "escalation_state.json"
+_FILING_STATE_FILE = Path(__file__).parent.parent.parent / "data" / "claim_filing_state.json"
 _SCRIPT = Path(__file__).parent.parent.parent / "automation" / "fetch_all.py"
 _ESC_SCRIPT = Path(__file__).parent.parent.parent / "automation" / "ih_escalate.py"
+_FILING_SCRIPT = Path(__file__).parent.parent.parent / "automation" / "submit_claim.py"
 _lock = threading.Lock()
 
 # Subprocess timeouts (also the basis for stale-run detection).
 _REFRESH_TIMEOUT_S = 300
 _ESC_TIMEOUT_S = 600  # 10 min — covers interactive login + form review
+# 30 min: MFA login (≤120s) + questionnaire readiness (≤240s) + the wizard
+# (~60s) + Anthem's file processing (≤180s) + the 15-min handoff hold, + margin.
+_FILING_TIMEOUT_S = 1800
 # A "running" state older than its timeout + this margin is treated as stale: the
 # worker must have died (dev reload, crash, sleep) without writing a terminal
 # status, so it no longer blocks new runs.
@@ -53,6 +58,20 @@ def _write_escalation(state: dict) -> None:
     _ESC_STATE_FILE.write_text(json.dumps(state))
 
 
+def _read_claim_filing() -> dict:
+    if _FILING_STATE_FILE.exists():
+        try:
+            return json.loads(_FILING_STATE_FILE.read_text())
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {"status": "idle", "submission_id": None, "last_run_at": None, "summary": None}
+
+
+def _write_claim_filing(state: dict) -> None:
+    _FILING_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _FILING_STATE_FILE.write_text(json.dumps(state))
+
+
 def _is_running(state: dict, timeout_s: int) -> bool:
     """True only if the state is 'running' AND fresh. A run older than its
     subprocess timeout (plus margin) means the worker died without clearing the
@@ -70,9 +89,14 @@ def _is_running(state: dict, timeout_s: int) -> bool:
 
 
 def _any_running() -> bool:
-    """True if either the Anthem refresh or an escalation is genuinely in progress.
-    Only one Playwright/browser job runs at a time, so both jobs share this guard."""
-    return _is_running(_read(), _REFRESH_TIMEOUT_S) or _is_running(_read_escalation(), _ESC_TIMEOUT_S)
+    """True if any Playwright job — refresh, escalation or claim filing — is
+    genuinely in progress. They share one browser profile and run headfully, so
+    only one at a time; every job checks this same guard."""
+    return (
+        _is_running(_read(), _REFRESH_TIMEOUT_S)
+        or _is_running(_read_escalation(), _ESC_TIMEOUT_S)
+        or _is_running(_read_claim_filing(), _FILING_TIMEOUT_S)
+    )
 
 
 def _normalized(state: dict, timeout_s: int) -> dict:
@@ -92,6 +116,11 @@ def get_escalation_status() -> dict:
         return _normalized(_read_escalation(), _ESC_TIMEOUT_S)
 
 
+def get_claim_filing_status() -> dict:
+    with _lock:
+        return _normalized(_read_claim_filing(), _FILING_TIMEOUT_S)
+
+
 def notify(title: str, message: str) -> None:
     """Best-effort macOS notification; no-op if osascript is unavailable."""
     try:
@@ -102,6 +131,35 @@ def notify(title: str, message: str) -> None:
         )
     except Exception:
         pass
+
+
+def _run_subprocess(script: Path, env_extra: dict, timeout_s: int) -> tuple[str, dict]:
+    """Run an automation script and normalize the outcome to (status, summary).
+
+    Shared by every job type. Deliberately calls subprocess.run through the
+    module global so tests can monkeypatch app.automation.subprocess.run.
+    """
+    try:
+        result = subprocess.run(
+            [sys.executable, str(script)],
+            cwd=str(script.parent.parent),
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            env={**os.environ, **env_extra},
+        )
+        return (
+            "complete" if result.returncode == 0 else "failed",
+            {
+                "returncode": result.returncode,
+                "stdout": result.stdout[-2_000:],
+                "stderr": result.stderr[-500:],
+            },
+        )
+    except subprocess.TimeoutExpired:
+        return "failed", {"error": f"timed out after {timeout_s}s"}
+    except Exception as e:
+        return "failed", {"error": str(e)}
 
 
 def _resolve_credentials(username: str, password: str) -> tuple[str, str] | None:
@@ -144,28 +202,11 @@ def run_automation(username: str = "", password: str = "") -> bool:
             )
             return
 
-        env = {**os.environ, "ANTHEM_USERNAME": creds[0], "ANTHEM_PASSWORD": creds[1]}
-        try:
-            result = subprocess.run(
-                [sys.executable, str(_SCRIPT)],
-                cwd=str(_SCRIPT.parent.parent),
-                capture_output=True,
-                text=True,
-                timeout=_REFRESH_TIMEOUT_S,
-                env=env,
-            )
-            summary = {
-                "returncode": result.returncode,
-                "stdout": result.stdout[-2_000:],
-                "stderr": result.stderr[-500:],
-            }
-            status = "complete" if result.returncode == 0 else "failed"
-        except subprocess.TimeoutExpired:
-            summary = {"error": f"timed out after {_REFRESH_TIMEOUT_S}s"}
-            status = "failed"
-        except Exception as e:
-            summary = {"error": str(e)}
-            status = "failed"
+        status, summary = _run_subprocess(
+            _SCRIPT,
+            {"ANTHEM_USERNAME": creds[0], "ANTHEM_PASSWORD": creds[1]},
+            _REFRESH_TIMEOUT_S,
+        )
 
         with _lock:
             _write({
@@ -198,18 +239,39 @@ def _mark_escalated(submission_id: str, session_factory=None) -> None:
 
 def _materialize_pdf(pdf_key: str | None) -> str:
     """Write the submission's stored PDF to a temp file and return its path, or ""
-    if there's no PDF / it can't be read. The caller deletes the temp file. Going
-    through storage.get keeps this working for non-local Storage backends."""
+    if there's no PDF / it can't be read. The caller passes the path to
+    _cleanup_pdf when done. Going through storage.get keeps this working for
+    non-local Storage backends.
+
+    The file keeps its original basename inside a temp *directory* — whoever
+    receives the upload (an Anthem adjudicator, say) sees "claim.pdf" rather
+    than "tmp8f3a91.pdf".
+    """
     if not pdf_key:
         return ""
     try:
         data = get_storage().get(pdf_key)
     except Exception:
         return ""
-    fd, path = tempfile.mkstemp(suffix=".pdf")
-    with os.fdopen(fd, "wb") as f:
+    name = os.path.basename(pdf_key) or "claim.pdf"
+    if not name.lower().endswith(".pdf"):
+        name += ".pdf"
+    path = os.path.join(tempfile.mkdtemp(), name)
+    with open(path, "wb") as f:
         f.write(data)
     return path
+
+
+def _cleanup_pdf(path: str) -> None:
+    """Remove a _materialize_pdf temp file and the directory holding it."""
+    if not path:
+        return
+    try:
+        if os.path.exists(path):
+            os.unlink(path)
+        os.rmdir(os.path.dirname(path))
+    except OSError:
+        pass
 
 
 def run_escalation(
@@ -235,44 +297,23 @@ def run_escalation(
 
     def _worker():
         pdf_path = _materialize_pdf(pdf_key)
-        env = {
-            **os.environ,
-            "IH_SUBMISSION_ID": submission_id,
-            "IH_MEMBER": member_name,
-            "IH_PROVIDER": provider_name,
-            "IH_SERVICE_DATE": service_date,
-            "IH_MESSAGE": message,
-            "IH_PDF_PATH": pdf_path,
-        }
         try:
             # Long timeout: the headful window stays open while the user logs in
             # (if the session expired) and reviews/submits the filled form.
-            result = subprocess.run(
-                [sys.executable, str(_ESC_SCRIPT)],
-                cwd=str(_ESC_SCRIPT.parent.parent),
-                capture_output=True,
-                text=True,
-                timeout=_ESC_TIMEOUT_S,
-                env=env,
+            status, summary = _run_subprocess(
+                _ESC_SCRIPT,
+                {
+                    "IH_SUBMISSION_ID": submission_id,
+                    "IH_MEMBER": member_name,
+                    "IH_PROVIDER": provider_name,
+                    "IH_SERVICE_DATE": service_date,
+                    "IH_MESSAGE": message,
+                    "IH_PDF_PATH": pdf_path,
+                },
+                _ESC_TIMEOUT_S,
             )
-            summary = {
-                "returncode": result.returncode,
-                "stdout": result.stdout[-2_000:],
-                "stderr": result.stderr[-500:],
-            }
-            status = "complete" if result.returncode == 0 else "failed"
-        except subprocess.TimeoutExpired:
-            summary = {"error": f"timed out after {_ESC_TIMEOUT_S}s"}
-            status = "failed"
-        except Exception as e:
-            summary = {"error": str(e)}
-            status = "failed"
         finally:
-            if pdf_path and os.path.exists(pdf_path):
-                try:
-                    os.unlink(pdf_path)
-                except OSError:
-                    pass
+            _cleanup_pdf(pdf_path)
 
         if status == "complete":
             _mark_escalated(submission_id)
@@ -297,3 +338,70 @@ def _classify_escalation_failure(summary: dict) -> str:
     if "auth" in text and "timeout" in text:
         return "Included Health escalation needs login — open the browser and sign in, then retry."
     return "Included Health escalation failed — check the Submissions page for details."
+
+
+def _classify_claim_filing_failure(summary: dict) -> str:
+    """Turn the script's "stage: msg" output into an actionable notification."""
+    text = (summary.get("stdout", "") + summary.get("stderr", "")).lower()
+    if "draft:" in text or "unfinished draft submission" in text:
+        return ("Anthem has an unfinished draft claim blocking new submissions — "
+                "continue or delete it in the browser window, then retry.")
+    if "patient:" in text or "could not pick the patient" in text:
+        return ("Couldn't pick the patient on Anthem — choose it in the open browser "
+                "window and finish there.")
+    if "auth" in text and ("timeout" in text or "timed out" in text):
+        return "Anthem filing needs sign-in — complete it in the browser window, then retry."
+    if "rejected the uploaded pdf" in text:
+        return "Anthem rejected the uploaded PDF — check the file and retry."
+    return "Anthem claim filing failed — check the Submissions page for details."
+
+
+def run_claim_filing(submission_id: str, member_name: str, pdf_key: str) -> bool:
+    """Spawn submit_claim.py in a background thread. Returns False if any
+    Playwright job is already running (single browser at a time).
+
+    Deliberately has no post-success hook: the script only drives Anthem's
+    wizard as far as the upload step, so whether the claim was actually filed is
+    unknowable here. submitted_date stays the user's to confirm.
+    """
+    with _lock:
+        if _any_running():
+            return False
+        _write_claim_filing({
+            "status": "running",
+            "submission_id": submission_id,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "last_run_at": None,
+            "summary": None,
+        })
+
+    def _worker():
+        pdf_path = _materialize_pdf(pdf_key)
+        try:
+            # Long timeout: the headful window stays open for sign-in and for the
+            # 15-minute handoff while the user completes the remaining steps.
+            status, summary = _run_subprocess(
+                _FILING_SCRIPT,
+                {
+                    "CLAIM_SUBMISSION_ID": submission_id,
+                    "CLAIM_MEMBER": member_name,
+                    "CLAIM_PDF_PATH": pdf_path,
+                },
+                _FILING_TIMEOUT_S,
+            )
+        finally:
+            _cleanup_pdf(pdf_path)
+
+        with _lock:
+            _write_claim_filing({
+                "status": status,
+                "submission_id": submission_id,
+                "last_run_at": datetime.now(timezone.utc).isoformat(),
+                "summary": summary,
+            })
+
+        if status == "failed":
+            notify("Claims Tracker", _classify_claim_filing_failure(summary))
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return True

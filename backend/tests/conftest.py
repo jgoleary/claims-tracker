@@ -36,6 +36,7 @@ def make_submission(db: Session):
         network_treatment: str = "out_of_network",
         submitted_date: date = date(2025, 11, 10),
         submission_method: str = "portal",
+        pdf_path: str | None = None,
     ) -> Submission:
         s = Submission(
             id=str(uuid.uuid4()),
@@ -47,6 +48,7 @@ def make_submission(db: Session):
             network_treatment=network_treatment,
             submitted_date=submitted_date,
             submission_method=submission_method,
+            pdf_path=pdf_path,
         )
         db.add(s)
         db.commit()

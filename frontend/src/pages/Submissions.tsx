@@ -5,13 +5,13 @@ import { api } from '../api'
 import type { BenefitsSnapshotOut, ExtractionResult, SubmissionCreate, SubmissionResponse } from '../types'
 import Modal from '../components/Modal'
 import EscalationModal from '../components/EscalationModal'
+import ClaimFilingPanel from '../components/ClaimFilingPanel'
+import FileWithAnthemModal from '../components/FileWithAnthemModal'
 import AlertBadge from '../components/Alert'
 import RedactedName from '../components/RedactedName'
 import { computeExpected, formatCents, formatDate, isInterestingSubmission, normalizeProvider } from '../utils'
 import { useYear } from '../context/YearContext'
 import { useRedact } from '../context/RedactContext'
-
-const ANTHEM_URL = 'https://membersecure.anthem.com/member/claims/submission-questionnaire'
 
 function RemainingBar({ benefits, label }: { benefits: BenefitsSnapshotOut | null; label: string }) {
   if (!benefits) return null
@@ -116,8 +116,8 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
       qc.invalidateQueries({ queryKey: ['dashboard'] })
       qc.invalidateQueries({ queryKey: ['providerNetworkDefaults'] })
       if (isEdit) { onClose(); return }
+      // Step 2 mounts ClaimFilingPanel, which drives Anthem's wizard for us.
       setCreatedId(result.id)
-      window.open(ANTHEM_URL, '_blank')
       setStep(2)
     },
     onError: (e: Error) => setError(e.message),
@@ -140,9 +140,9 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
       <Modal title="Submit to Anthem" onClose={onClose}>
         <div className="space-y-4">
           <div className="text-sm text-green-700">{'✓'} Submission saved locally.</div>
+          <ClaimFilingPanel submissionId={createdId!} />
           <p className="text-sm text-gray-600">
-            Anthem's claim questionnaire was opened in a new tab. Once you've submitted the
-            claim there, confirm it below.
+            Once you've submitted the claim in that window, confirm it below.
           </p>
           <div className="flex justify-end gap-3 pt-2">
             <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Do it later</button>
@@ -227,7 +227,7 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
         </div>
         {!isEdit && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">PDF (optional)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">PDF (required)</label>
             <div className="flex items-center gap-3">
               <input type="file" accept=".pdf" onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)} className="text-sm" />
               <button
@@ -259,6 +259,11 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
               </button>
             </div>
             {extractNote && <div className="text-xs text-amber-700 mt-1">{extractNote}</div>}
+            {!pdfFile && (
+              <div className="text-xs text-gray-500 mt-1">
+                Attach the claim PDF — it's uploaded to Anthem for you.
+              </div>
+            )}
           </div>
         )}
         {totals && (
@@ -269,7 +274,8 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
         )}
         <div className="flex justify-end gap-3 pt-2">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
-          <button onClick={() => mutation.mutate()} disabled={mutation.isPending}
+          <button onClick={() => mutation.mutate()}
+            disabled={mutation.isPending || (!isEdit && !pdfFile)}
             className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
             {mutation.isPending ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Submission'}
           </button>
@@ -284,6 +290,7 @@ export default function Submissions() {
   const [showAdd, setShowAdd] = useState(false)
   const [editing, setEditing] = useState<SubmissionResponse | null>(null)
   const [escalating, setEscalating] = useState<SubmissionResponse | null>(null)
+  const [filing, setFiling] = useState<SubmissionResponse | null>(null)
   const [filterMember, setFilterMember] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterProvider, setFilterProvider] = useState('')
@@ -392,6 +399,14 @@ export default function Submissions() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-3">
+                      {sub.pdf_path && !sub.submitted_date && (
+                        <button
+                          onClick={() => setFiling(sub)}
+                          className="text-xs text-gray-400 hover:text-blue-600 transition-colors"
+                        >
+                          File with Anthem
+                        </button>
+                      )}
                       <button
                         onClick={() => setEscalating(sub)}
                         className="text-xs text-gray-400 hover:text-amber-600 transition-colors"
@@ -434,6 +449,12 @@ export default function Submissions() {
         <EscalationModal
           submission={escalating}
           onClose={() => setEscalating(null)}
+        />
+      )}
+      {filing && (
+        <FileWithAnthemModal
+          submission={filing}
+          onClose={() => setFiling(null)}
         />
       )}
     </div>
