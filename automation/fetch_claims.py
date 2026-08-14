@@ -27,19 +27,45 @@ _EXPORT_SELECTORS = [
     '[aria-label*="download" i]',
 ]
 
+# Playwright unions comma-separated selectors, so one wait covers all of them.
+_EXPORT_SELECTOR = ", ".join(_EXPORT_SELECTORS)
+
+# The claims micro-app renders well inside this; only a broken bundle never does.
+_EXPORT_TIMEOUT_MS = 30_000
+
 
 def download_claims_csv(page: Page) -> Path:
     print("Navigating to claims summary…")
     page.goto(CLAIMS_URL, wait_until="domcontentloaded", timeout=30_000)
     auth.check_for_site_error(page)
 
+    print("Waiting for Export button…")
+    if not _wait_for_export(page):
+        # An empty claims page is far more often a poisoned HTTP cache than a UI
+        # change: a corrupted cached script kills the micro-app and Anthem serves
+        # a bare header and footer. Clear the cache and reload once before
+        # blaming the selectors.
+        print("  Claims page rendered empty — clearing the browser cache and retrying…")
+        auth.clear_http_cache(page)
+        page.goto(CLAIMS_URL, wait_until="domcontentloaded", timeout=30_000)
+        auth.check_for_site_error(page)
+        if not _wait_for_export(page):
+            raise RuntimeError(
+                "Could not find the Export button on the claims page, including "
+                "after clearing the browser cache and reloading.\n"
+                f"URL: {CLAIMS_URL}\n"
+                "If the page is visibly empty, check the browser console for a JS "
+                f"error and try deleting the profile at {auth.PROFILE_DIR}.\n"
+                "Otherwise update _EXPORT_SELECTORS in fetch_claims.py to match "
+                "Anthem's current UI."
+            )
+
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
     dest = DATA_DIR / f"claims-{timestamp}.csv"
 
-    print("Waiting for Export button…")
     with page.expect_download(timeout=30_000) as dl_info:
-        _click_export(page)
+        page.locator(_EXPORT_SELECTOR).first.click(timeout=10_000)
 
     download = dl_info.value
     if download.failure():
@@ -50,18 +76,13 @@ def download_claims_csv(page: Page) -> Path:
     return dest
 
 
-def _click_export(page: Page) -> None:
-    for sel in _EXPORT_SELECTORS:
-        try:
-            page.click(sel, timeout=5_000)
-            return
-        except Exception:
-            continue
-    raise RuntimeError(
-        "Could not find the Export button on the claims page.\n"
-        f"URL: {CLAIMS_URL}\n"
-        "Update _EXPORT_SELECTORS in fetch_claims.py to match Anthem's current UI."
-    )
+def _wait_for_export(page: Page, timeout_ms: int = _EXPORT_TIMEOUT_MS) -> bool:
+    """True once an Export control has rendered — i.e. the claims app is alive."""
+    try:
+        page.wait_for_selector(_EXPORT_SELECTOR, timeout=timeout_ms, state="visible")
+        return True
+    except Exception:
+        return False
 
 
 def post_csv(path: Path) -> bool:

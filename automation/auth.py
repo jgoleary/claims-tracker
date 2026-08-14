@@ -8,7 +8,7 @@ from playwright.sync_api import BrowserContext, Page, Playwright
 
 from pathlib import Path
 
-_PROFILE_DIR = Path(__file__).parent.parent / "data" / "browser-profile"
+PROFILE_DIR = Path(__file__).parent.parent / "data" / "browser-profile"
 _BACKEND_DIR = Path(__file__).parent.parent / "backend"
 
 ANTHEM_LOGIN_URL = "https://www.anthem.com/login"
@@ -50,14 +50,32 @@ def get_credentials() -> tuple[str, str]:
 
 def launch_context(pw: Playwright) -> BrowserContext:
     """Launch a persistent browser context so session cookies survive between runs."""
-    _PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+    PROFILE_DIR.mkdir(parents=True, exist_ok=True)
     return pw.chromium.launch_persistent_context(
-        str(_PROFILE_DIR),
+        str(PROFILE_DIR),
         headless=False,
         # Remove Playwright's automation fingerprint so Anthem doesn't detect a bot.
         args=["--disable-blink-features=AutomationControlled"],
         ignore_default_args=["--enable-automation"],
     )
+
+
+def clear_http_cache(page: Page) -> bool:
+    """Drop the persistent profile's HTTP cache. Returns True if it worked.
+
+    A corrupted entry in data/browser-profile's cache serves a truncated script,
+    the micro-app dies on a JS parse error, and the page renders as bare header
+    and footer with no content — indistinguishable from a UI change until you
+    look at the console. Session cookies live outside the HTTP cache, so this
+    does not log us out. Chromium only exposes cache clearing over CDP.
+    """
+    try:
+        cdp = page.context.new_cdp_session(page)
+        cdp.send("Network.clearBrowserCache")
+        return True
+    except Exception as e:  # a failed recovery attempt must not mask the real error
+        print(f"  Note: could not clear the browser cache ({e}).")
+        return False
 
 
 def check_for_site_error(page: Page) -> None:

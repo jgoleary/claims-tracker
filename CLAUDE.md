@@ -231,7 +231,9 @@ needed.
   non-headless for MFA. Session cookies persist in `data/browser-profile/` so MFA is only
   required once (until the Okta session expires).
 - **`fetch_claims.py`** — navigates to the claims summary page, clicks Export, saves
-  `data/exports/claims-YYYY-MM-DD-HHMM.csv`, POSTs to `/api/ingest/claims-csv`.
+  `data/exports/claims-YYYY-MM-DD-HHMM.csv`, POSTs to `/api/ingest/claims-csv`. Gates on
+  the Export button rendering (`_wait_for_export`) before clicking; if it never appears,
+  clears the HTTP cache and reloads once before failing (see Poisoned browser cache).
 - **`fetch_benefits.py`** — navigates to the benefits page, reads `#ant-tab-body-1-0`
   (in-network) and `#ant-tab-body-1-1` (OON) directly by tab body ID. Extracts amounts
   from `.progress-bar-amount .label-text` spans and limits from
@@ -243,6 +245,16 @@ needed.
   `auth.login()` and `auth.launch_context()`, so it shares the refresh flow's session and
   MFA. Inputs are `CLAIM_SUBMISSION_ID` / `CLAIM_MEMBER` / `CLAIM_PDF_PATH` /
   `CLAIM_DRY_RUN` env vars. Spawned by `POST /api/submissions/{id}/file-with-anthem/run`.
+
+**Poisoned browser cache:** A page that renders as bare header and footer — no table, no
+buttons, `inner_text("body")` a few hundred chars — is usually **not** a UI change. A
+corrupted script in `data/browser-profile`'s HTTP cache makes the micro-app die on a JS
+`Invalid or unexpected token` parse error, and only that one micro-app breaks (this hit
+`/member/claims` on 2026-08-13 while the benefits page in the same run kept working, with
+no code change on our side). `auth.clear_http_cache(page)` drops that cache over CDP;
+session cookies live elsewhere, so it does not log the session out. Check the browser
+console before touching selectors, and delete `data/browser-profile` if a cache clear
+isn't enough.
 
 **Selector maintenance:** If Anthem changes their UI, update `_EXPORT_SELECTORS` in
 `fetch_claims.py`, the tab/amount selectors in `fetch_benefits.py`, or the
