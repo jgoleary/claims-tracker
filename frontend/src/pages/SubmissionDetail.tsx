@@ -177,7 +177,7 @@ export default function SubmissionDetail() {
               {([['Claim #', claim.claim_number], ['Status', claim.status], ['Service Date', formatDate(claim.service_date)], ['Provider (Anthem)', claim.provider_name], ['Billed', formatCents(claim.billed)], ['Plan Paid', formatCents(claim.plan_paid)], ['Deductible', formatCents(claim.deductible)], ['Coinsurance', formatCents(claim.coinsurance)], ['Your Cost', formatCents(claim.your_cost)]] as [string, string][]).map(([label, value]) => (
                 <div key={label} className="flex justify-between">
                   <dt className="text-gray-500">{label}</dt>
-                  <dd className={`font-medium ${label === 'Status' && (claim.status === 'Denied' || claim.status === 'Deleted') ? 'text-red-600' : label === 'Status' && claim.status === 'Approved' ? 'text-green-600' : 'text-gray-900'}`}>{value}</dd>
+                  <dd className={`font-medium ${label === 'Status' && (claim.status === 'Denied' || claim.status === 'Missing Info') ? 'text-red-600' : label === 'Status' && claim.status === 'Approved' ? 'text-green-600' : 'text-gray-900'}`}>{value}</dd>
                 </div>
               ))}
             </dl>

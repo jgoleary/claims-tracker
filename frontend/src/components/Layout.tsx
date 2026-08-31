@@ -27,7 +27,7 @@ export default function Layout() {
   })
 
   const totalAlerts = dash
-    ? dash.counts.missing + dash.counts.denied + dash.counts.deleted + dash.counts.stale_pending + dash.counts.underpaid + dash.counts.vanished
+    ? dash.counts.missing + dash.counts.denied + dash.counts.needs_refile + dash.counts.stale_pending + dash.counts.underpaid + dash.counts.vanished
     : 0
 
   const { data: subs } = useQuery({
@@ -36,6 +36,17 @@ export default function Layout() {
     refetchInterval: 60_000,
   })
   const interestingCount = (subs ?? []).filter(isInterestingSubmission).length
+
+  // Same query key as Matches.tsx on purpose: the badge shares that page's cache,
+  // so confirming or rejecting a suggestion there updates the count immediately.
+  // Not year-scoped, because the Match Review page isn't either — the badge has to
+  // agree with the page it points at.
+  const { data: suggestions } = useQuery({
+    queryKey: ['suggestions'],
+    queryFn: api.matches.suggestions,
+    refetchInterval: 60_000,
+  })
+  const pendingMatches = (suggestions ?? []).length
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -76,6 +87,11 @@ export default function Layout() {
               {label === 'Submissions' && interestingCount > 0 && (
                 <span className="bg-slate-500 text-white text-xs rounded-full px-1.5 py-0.5 leading-none">
                   {interestingCount}
+                </span>
+              )}
+              {label === 'Match Review' && pendingMatches > 0 && (
+                <span className="bg-amber-500 text-white text-xs rounded-full px-1.5 py-0.5 leading-none">
+                  {pendingMatches}
                 </span>
               )}
             </NavLink>

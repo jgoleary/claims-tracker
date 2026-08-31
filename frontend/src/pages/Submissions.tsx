@@ -370,10 +370,10 @@ export default function Submissions() {
                   </td>
                   <td className="px-4 py-3">
                     {sub.anthem_claim_status ? (
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${
                         sub.anthem_claim_status === 'Approved' ? 'bg-green-100 text-green-700'
                         : sub.anthem_claim_status === 'Denied' ? 'bg-red-100 text-red-700'
-                        : sub.anthem_claim_status === 'Deleted' ? 'bg-gray-200 text-gray-600'
+                        : sub.anthem_claim_status === 'Missing Info' ? 'bg-red-100 text-red-700'
                         : 'bg-amber-100 text-amber-700'
                       }`}>
                         {sub.anthem_claim_status}

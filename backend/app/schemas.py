@@ -153,7 +153,7 @@ class DashboardCounts(BaseModel):
     missing: int = 0
     stale_pending: int = 0
     denied: int = 0
-    deleted: int = 0
+    needs_refile: int = 0
     underpaid: int = 0
     overpaid: int = 0
     unsubmitted: int = 0

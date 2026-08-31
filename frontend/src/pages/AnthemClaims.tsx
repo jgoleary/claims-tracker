@@ -54,7 +54,7 @@ export default function AnthemClaims() {
           <option value="Pending">Pending</option>
           <option value="Approved">Approved</option>
           <option value="Denied">Denied</option>
-          <option value="Deleted">Deleted</option>
+          <option value="Missing Info">Missing Info</option>
         </select>
         <select value={filterPatient} onChange={(e) => setFilterPatient(e.target.value)}
           className="border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -90,7 +90,7 @@ export default function AnthemClaims() {
                   <td className="px-4 py-3 text-gray-700">{c.provider_name}</td>
                   <td className="px-4 py-3 text-gray-500">{formatDate(c.service_date)}</td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${c.status === 'Approved' ? 'bg-green-100 text-green-700' : c.status === 'Denied' ? 'bg-red-100 text-red-700' : c.status === 'Deleted' ? 'bg-gray-200 text-gray-600' : 'bg-amber-100 text-amber-700'}`}>{c.status}</span>
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${c.status === 'Approved' ? 'bg-green-100 text-green-700' : c.status === 'Denied' ? 'bg-red-100 text-red-700' : c.status === 'Missing Info' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{c.status}</span>
                   </td>
                   <td className="px-4 py-3">{formatCents(c.billed)}</td>
                   <td className="px-4 py-3">{formatCents(c.plan_paid)}</td>

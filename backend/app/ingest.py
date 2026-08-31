@@ -56,12 +56,25 @@ def _parse_patient_name(s: str) -> str:
     return parts[0] if parts else s
 
 
+# Anthem's CSV export writes "Deleted" for the status its portal displays as
+# "Missing Info: New Claim Needed" — the claim was not voided, it could not be
+# processed and has to be re-filed. Translating here is the single point where
+# that wire word is understood; nothing downstream ever sees "Deleted".
+_STATUS_BY_WIRE = {
+    'pending': 'Pending',
+    'approved': 'Approved',
+    'denied': 'Denied',
+    'deleted': 'Missing Info',
+    'missing info': 'Missing Info',
+}
+
+
 def _normalize_status(s: str) -> str:
-    """Normalize Anthem status to Pending/Approved/Denied/Deleted."""
-    normalized = s.strip().capitalize()
-    if normalized not in ('Pending', 'Approved', 'Denied', 'Deleted'):
-        raise ValueError(f"Unknown claim status: {s!r}")
-    return normalized
+    """Normalize Anthem status to Pending/Approved/Denied/Missing Info."""
+    try:
+        return _STATUS_BY_WIRE[s.strip().lower()]
+    except KeyError:
+        raise ValueError(f"Unknown claim status: {s!r}") from None
 
 
 @dataclass

@@ -76,8 +76,16 @@ class TestNormalizeStatus:
     def test_uppercase_denied(self):
         assert _normalize_status("DENIED") == "Denied"
 
-    def test_deleted(self):
-        assert _normalize_status("Deleted") == "Deleted"
+    def test_anthem_wire_deleted_becomes_missing_info(self):
+        # Anthem's CSV writes "Deleted" for what the portal calls
+        # "Missing Info: New Claim Needed" — translate it at the boundary.
+        assert _normalize_status("Deleted") == "Missing Info"
+
+    def test_missing_info_passes_through(self):
+        assert _normalize_status("Missing Info") == "Missing Info"
+
+    def test_missing_info_is_case_insensitive(self):
+        assert _normalize_status("MISSING INFO") == "Missing Info"
 
     def test_unknown_raises(self):
         with pytest.raises(ValueError, match="Unknown claim status"):
