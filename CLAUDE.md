@@ -141,10 +141,23 @@ was filed, so `submitted_date` is still set only by the user's own confirmation.
 ### Anthem claim filing
 
 `automation/submit_claim.py` drives Anthem's out-of-network medical claim wizard: Medical
-→ "Doctor or other medical specialist" → patient → requirements → upload the PDF → wait
-out Anthem's file processing. It then **stops at "Step 3 of 5"** and holds the browser
-open (15 min) for the user to complete the remaining steps and click Submit. Nothing is
-ever filed without a human.
+→ "Doctor or other medical specialist" → patient → upload the PDF → wait out Anthem's file
+processing. It then **stops on the "Claim details" step** and holds the browser open (15
+min) for the user to complete the remaining steps and click Submit. Nothing is ever filed
+without a human.
+
+"Claim details" is where Anthem shows what _its own_ extraction read off the PDF ("Here's
+what we found in your claim") — provider NPI, tax ID, diagnosis and procedure codes,
+amounts — and that output is not reliably correct (it flagged its own 9-digit provider ZIP
+as invalid on the run this was written against). That is why the handoff is there and not
+later.
+
+**Anthem rebuilt this flow as a react-native-web micro-app (2026-08).** Every control is a
+`<div>` (or an `<input>`) carrying a `role` and a `data-testid` — there are no `<button>`
+or `<a>` elements in it. Tag-based selectors and `get_by_role("button")` match nothing,
+which is exactly how the previous version broke: `_wait_for_page` found the text "Get
+Started" while nothing clickable held it. Write selectors against `data-testid`; the
+`css-*` / `r-*` class names are regenerated per build and are never usable.
 
 - Triggered from the Add Submission modal's step-2 screen (which is the **only** warning
   that the user must finish in the browser — there is deliberately no notification or
@@ -154,22 +167,32 @@ ever filed without a human.
 - A PDF is mandatory: the Add Submission button is disabled without one, and
   `POST /api/submissions/{id}/file-with-anthem/run` 400s if `pdf_path` is unset.
 - Patient selection compares the submission's `member_name` against the dropdown's
-  `FIRST M LAST (MM/DD/YYYY)` options via `_normalize_name` / `match_patient_options`
-  (surnames compared only when both sides have one). Zero or 2+ matches raises
+  `FIRST M LAST` options via `_normalize_name` / `match_patient_options` (surnames
+  compared only when both sides have one). Zero or 2+ matches raises
   `AmbiguousPatientError` — the script refuses to guess, fails the run, and leaves the
-  browser open on the dropdown.
-- `CLAIM_DRY_RUN=1` stops before "Submit a Claim", the last point before Anthem creates
-  any server-side state — use it to exercise login, steps 1-3 and the patient matcher
-  against the real site with no side effects.
-- Every wizard step is gated on its page heading (`_wait_for_page`) before acting: four
-  pages carry a "Next" button, so acting before the SPA navigates silently skips a step.
+  browser open on the dropdown. Anthem **dropped the trailing `(MM/DD/YYYY)`** from these
+  options in the redesign, so surnames are now the only thing separating two household
+  members who share a first name.
+- The patient control is an `<input role="combobox">`: the chosen name lands in its
+  `value`, not in the page body. `_selection_took()` therefore reads the control (via
+  `_control_value`), because `inner_text("body")` reports every successful selection as a
+  failure.
+- `CLAIM_DRY_RUN=1` stops before the upload — uploading is what makes Anthem save a draft,
+  so everything above it is repeatable. Use it to exercise login, the card, the claim-type
+  radio and the patient matcher against the real site with no side effects.
+- Every wizard step is gated on a **step-unique `data-testid`** (`_wait_for_step`, the
+  `_STEP_*` constants) before acting. Body text cannot gate these steps: every ai-flow
+  page renders the entire sub-step rail ("Upload files … Processing files … Claim details
+  …"), so waiting for the text "Claim details" returns true while still on Processing.
 - **Anthem allows only one draft claim at a time.** Any abandoned or failed run leaves a
   draft behind, and Anthem then refuses to start a new claim ("You must continue or delete
   your draft submissions before you can submit a new claim"), diverting the wizard to the
-  draft list. `_wait_for_page` watches for that text on every poll and raises
+  draft list. `_wait_for_step` watches for that text on every poll and raises
   `DraftSubmissionBlockedError` immediately rather than timing out on whichever page it
-  was expecting. Clear the draft (Continue or Delete) in the Claim Submission Center, then
-  retry. Expect to hit this regularly while iterating.
+  was expecting. The wording survived the redesign unchanged; the block now lands after
+  the claim-type step, on `/member/claims/submission/form`. Clear the draft (Continue or
+  Delete) in the Claim Submission Center, then retry. Expect to hit this regularly while
+  iterating.
 - Only the real handoff holds the window for 15 minutes. A failed run holds it for 3
   (`_ERROR_REVIEW_TIMEOUT_MS`) and says so; a dry run doesn't hold it at all, so selector
   iteration stays fast.
@@ -245,6 +268,9 @@ needed.
   `auth.login()` and `auth.launch_context()`, so it shares the refresh flow's session and
   MFA. Inputs are `CLAIM_SUBMISSION_ID` / `CLAIM_MEMBER` / `CLAIM_PDF_PATH` /
   `CLAIM_DRY_RUN` env vars. Spawned by `POST /api/submissions/{id}/file-with-anthem/run`.
+- **`probe_claim_wizard.py`** — read-only diagnostic that dumps the live claim wizard so
+  selectors can be rewritten from evidence rather than guesswork (see Selector
+  maintenance). Not part of any run path; invoked by hand.
 
 **Poisoned browser cache:** A page that renders as bare header and footer — no table, no
 buttons, `inner_text("body")` a few hundred chars — is usually **not** a UI change. A
@@ -258,9 +284,25 @@ isn't enough.
 
 **Selector maintenance:** If Anthem changes their UI, update `_EXPORT_SELECTORS` in
 `fetch_claims.py`, the tab/amount selectors in `fetch_benefits.py`, or the
-`_MEDICAL_GET_STARTED` / `_PATIENT_SELECT` / `_PATIENT_TRIGGER` / `_UPLOAD_BUTTON`
-constants (and the `_wait_for_page` heading needles) in `submit_claim.py`. Every failure
-message names the file and constant to edit.
+`_MEDICAL_GET_STARTED` / `_PATIENT_TRIGGER` / `_UPLOAD_*` / `_PROCESSING_CONTINUE` and
+`_STEP_*` constants in `submit_claim.py`. Every failure message names the file and
+constant to edit.
+
+Don't guess the new markup — **run `automation/probe_claim_wizard.py` and look**. It logs
+in, opens the wizard and dumps the live page (URL, title, full body text, every clickable
+with its role/testid/visibility, every `data-testid`) to
+`data/probe_wizard*.{txt,html,png}`. It clicks nothing by default, so it cannot create or
+advance a draft.
+
+- `--follow` keeps the window open and snapshots every page **you** navigate to, which
+  maps the whole flow without the script touching anything. Use this when a redesign has
+  moved more than one step.
+- `--click-medical` walks Medical → claim type → patient by itself and snapshots each
+  step. It stops before the upload, so it still creates no draft.
+- `backend/tests/test_submit_claim.py::test_step_selectors_are_the_ones_anthem_serves`
+  pins the selector strings a live run confirmed. The flow tests build their fake steps
+  _from_ those constants, so they move in lockstep and cannot catch a wrong value — that
+  pin is what does. Update it when you update the constants, and say what verified them.
 
 ### Credentials (macOS Keychain)
 

@@ -28,8 +28,8 @@ export default function AnthemClaimDetail() {
     ? 'bg-green-100 text-green-700'
     : claim.status === 'Denied'
     ? 'bg-red-100 text-red-700'
-    : claim.status === 'Deleted'
-    ? 'bg-gray-200 text-gray-600'
+    : claim.status === 'Missing Info'
+    ? 'bg-red-100 text-red-700'
     : 'bg-amber-100 text-amber-700'
 
   return (
@@ -43,7 +43,7 @@ export default function AnthemClaimDetail() {
           <h1 className="text-2xl font-bold text-gray-900">{claim.provider_name}</h1>
           <p className="text-sm text-gray-500 mt-1 font-mono">{claim.claim_number}</p>
         </div>
-        <span className={`text-sm font-medium px-3 py-1 rounded-full ${statusColor}`}>{claim.status}</span>
+        <span className={`text-sm font-medium px-3 py-1 rounded-full whitespace-nowrap ${statusColor}`}>{claim.status}</span>
       </div>
 
       <div className="grid gap-4">

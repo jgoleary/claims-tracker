@@ -75,8 +75,10 @@ def compute_raw_flags(submission, match=None, latest_ingest_at: Optional[datetim
     if claim.status == "Denied":
         alerts.append(Alert("DENIED", "red", {}))
 
-    if claim.status == "Deleted":
-        alerts.append(Alert("DELETED", "red", {}))
+    # "Missing Info" is Anthem refusing the claim for missing/invalid data; the
+    # fix is to file a new one, so the flag names the action, not the status.
+    if claim.status == "Missing Info":
+        alerts.append(Alert("NEEDS_REFILE", "red", {}))
 
     if claim.status == "Approved":
         expected = submission.expected_reimbursement

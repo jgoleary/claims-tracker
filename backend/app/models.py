@@ -66,7 +66,7 @@ class AnthemClaim(Base):
     received_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     processed_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(
-        SAEnum("Pending", "Approved", "Denied", "Deleted", name="claim_status"),
+        SAEnum("Pending", "Approved", "Denied", "Missing Info", name="claim_status"),
         nullable=False,
     )
     provider_name: Mapped[str] = mapped_column(String, nullable=False)

@@ -61,18 +61,20 @@ class TestComputeFlags:
         flags = compute_flags(sub, match=match)
         assert any(f.flag == "DENIED" and f.severity == "red" for f in flags)
 
-    def test_deleted_flag(self):
+    def test_needs_refile_flag(self):
+        # "Missing Info" means Anthem could not process the claim and needs a new
+        # one filed — actionable, not voided.
         sub = _make_submission()
-        match = _make_match(status="Deleted")
+        match = _make_match(status="Missing Info")
         flags = compute_flags(sub, match=match)
-        assert any(f.flag == "DELETED" and f.severity == "red" for f in flags)
+        assert any(f.flag == "NEEDS_REFILE" and f.severity == "red" for f in flags)
 
     def test_superseded_submission_raises_no_flags(self):
-        # A deprecated submission is silent even when matched to a Deleted claim
-        # that would otherwise raise a red DELETED alert.
+        # A deprecated submission is silent even when matched to a Missing Info
+        # claim that would otherwise raise a red NEEDS_REFILE alert.
         sub = _make_submission()
         sub.superseded_by_id = "some-other-submission-id"
-        match = _make_match(status="Deleted")
+        match = _make_match(status="Missing Info")
         assert compute_flags(sub, match=match) == []
         # ...and also when unmatched and long overdue (would normally be MISSING).
         overdue = _make_submission(submitted_date=date.today() - timedelta(days=config.MISSING_DAYS + 1))

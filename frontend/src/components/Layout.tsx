@@ -27,7 +27,7 @@ export default function Layout() {
   })
 
   const totalAlerts = dash
-    ? dash.counts.missing + dash.counts.denied + dash.counts.deleted + dash.counts.stale_pending + dash.counts.underpaid + dash.counts.vanished
+    ? dash.counts.missing + dash.counts.denied + dash.counts.needs_refile + dash.counts.stale_pending + dash.counts.underpaid + dash.counts.vanished
     : 0
 
   const { data: subs } = useQuery({

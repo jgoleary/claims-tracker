@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
 
-export const ANTHEM_URL = 'https://membersecure.anthem.com/member/claims/submission-questionnaire'
+export const ANTHEM_URL = 'https://membersecure.anthem.com/member/claims/submission/questionnaire'
 
 /**
  * Starts the Anthem claim-filing automation for a submission and reports on it.
@@ -77,12 +77,13 @@ export default function ClaimFilingPanel({ submissionId }: { submissionId: strin
       <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-900">
         <p>
           A browser window is opening. It signs in to Anthem, picks the patient, uploads your
-          PDF and waits for Anthem to process it — then stops at{' '}
-          <span className="font-medium">Step 3 of 5</span>.
+          PDF and waits for Anthem to process it — then stops on{' '}
+          <span className="font-medium">Claim details</span>.
         </p>
         <p className="mt-2 font-medium">
-          You must finish the remaining steps and click Submit in that window. Nothing is
-          filed with Anthem until you do.
+          Check what Anthem read off your PDF — provider NPI, tax ID, ZIP, diagnosis and
+          procedure codes, amounts — fix anything wrong, then finish the remaining steps and
+          click Submit in that window. Nothing is filed with Anthem until you do.
         </p>
         <p className="mt-2 text-blue-800">
           The window closes on its own after 15 minutes — close it yourself when you're done.

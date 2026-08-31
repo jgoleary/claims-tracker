@@ -41,6 +41,17 @@ def _migrate(eng=engine) -> None:
             with eng.begin() as conn:
                 conn.execute(text("ALTER TABLE submissions ADD COLUMN resolved_flags VARCHAR"))
 
+    if "anthem_claims" in inspector.get_table_names():
+        # Claims ingested before the rename hold Anthem's wire word "Deleted" for
+        # what its portal calls "Missing Info: New Claim Needed" (see
+        # ingest._STATUS_BY_WIRE). Rewrite them so one vocabulary is stored.
+        # The status column is a plain VARCHAR with no CHECK constraint, and
+        # SQLite does not enforce declared lengths, so the longer word fits.
+        with eng.begin() as conn:
+            conn.execute(text(
+                "UPDATE anthem_claims SET status = 'Missing Info' WHERE status = 'Deleted'"
+            ))
+
 
 def init_db() -> None:
     """Create all tables, then apply migrations. Safe to call multiple times."""

@@ -28,7 +28,7 @@ export interface SubmissionResponse {
   created_at: string
   updated_at: string
   anthem_claim_number: string | null
-  anthem_claim_status: 'Pending' | 'Approved' | 'Denied' | 'Deleted' | null
+  anthem_claim_status: 'Pending' | 'Approved' | 'Denied' | 'Missing Info' | null
   anthem_plan_paid: number | null
   superseded_by: SubmissionRef | null
   supersedes: SubmissionRef[]
@@ -54,7 +54,7 @@ export interface AnthemClaimResponse {
   service_date: string
   received_date: string | null
   processed_date: string | null
-  status: 'Pending' | 'Approved' | 'Denied' | 'Deleted'
+  status: 'Pending' | 'Approved' | 'Denied' | 'Missing Info'
   provider_name: string
   billed: number
   plan_discount: number
@@ -87,7 +87,7 @@ export interface DashboardCounts {
   missing: number
   stale_pending: number
   denied: number
-  deleted: number
+  needs_refile: number
   underpaid: number
   overpaid: number
   unsubmitted: number
