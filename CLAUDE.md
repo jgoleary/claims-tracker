@@ -63,10 +63,13 @@ npm run lint
   when a matched claim's `last_seen_at` predates `latest_ingest_at` (= `max(last_seen_at)`
   across all anthem_claims, supplied by `routes/submissions.latest_ingest_at(db)`) — i.e.
   the claim dropped out of Anthem's latest export. Ingest is upsert-only and never deletes
-  vanished claims, so this is how a disappeared-but-still-matched claim gets surfaced.
-  `compute_flags()` is a thin wrapper that suppresses everything for a resolved or
-  superseded submission and otherwise delegates to `compute_raw_flags()`, which does the
-  actual work; call the raw variant only when you need to see through a resolution.
+  vanished claims, so this is how a disappeared-but-still-matched claim gets surfaced. The
+  `NEEDS_REFILE` flag (red) fires on a `Missing Info` claim — see the status vocabulary
+  note under `ingest.py`; it means Anthem wants a new claim filed, so the flag names the
+  action rather than the status. `compute_flags()` is a thin wrapper that suppresses
+  everything for a resolved or superseded submission and otherwise delegates to
+  `compute_raw_flags()`, which does the actual work; call the raw variant only when you
+  need to see through a resolution.
 - **`resolution.py`** — `reopen_resolved(db)` undoes manual resolutions that no longer
   hold. See Manual resolution.
 - **`ingest.py`** — `ingest_claims_csv()` parses the Anthem CSV (BOM-safe via `utf-8-sig`,
@@ -81,7 +84,16 @@ npm run lint
   the name inconsistently (`"First Last"` vs `"First"`) across exports, so the surname/DOB
   are dropped to keep one person from fragmenting into multiple `patient_name` values.
   Matching compares on first name (`matching.py:_first_name`) so full-name submissions
-  still link to first-name claims.
+  still link to first-name claims. `_normalize_status()` maps the `Status` column through
+  `_STATUS_BY_WIRE` to one of `Pending` / `Approved` / `Denied` / `Missing Info`. **The
+  export writes `Deleted` for the status the portal displays as "Missing Info: New Claim
+  Needed"** — the claim was not voided; Anthem could not process it ("critical information
+  needed to process the claim is missing or invalid") and a new claim has to be filed.
+  That is the single point where the wire word is understood, so nothing downstream ever
+  sees `Deleted`; `database._migrate()` rewrites rows ingested before the rename. Verified
+  against the live portal on 2026-08-30: a claim the export called `Deleted` was shown as
+  "Missing Info: New Claim Needed", and the portal's own status filter offers exactly
+  Missing Info / Approved / Denied / Pending — the same four values, one renamed.
 - **`storage.py`** — `Storage` ABC with `LocalFileStorage` impl. PDF files stored under
   `data/pdfs/`. The `pdf_path` column is a storage key, not a raw filesystem path. Swap to
   S3 by implementing `Storage` and calling `set_storage()`.
