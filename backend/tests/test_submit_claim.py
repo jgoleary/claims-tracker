@@ -143,6 +143,7 @@ NAV_SELECTORS = {
     SC._MEDICAL_GET_STARTED[0],
     SC._CLAIM_TYPE_NEXT[0],
     SC._PATIENT_NEXT[0],
+    SC._REQUIREMENTS_NEXT[0],
     SC._UPLOAD_NEXT[0],
     SC._PROCESSING_CONTINUE[0],
 }
@@ -220,15 +221,25 @@ class _Step:
         self.options = list(options)
 
 
+def _requirements_step():
+    """Anthem's "Claims submission requirements" interstitial. Nothing to fill
+    in — it just has to be clicked through."""
+    return _Step([SC._STEP_REQUIREMENTS, SC._REQUIREMENTS_NEXT[0]],
+                 "Claims submission requirements Important to know "
+                 "Submit one claim for each doctor or healthcare professional")
+
+
 def _flow_steps():
-    """The real six-screen flow, keyed by the same constants the driver uses."""
+    """The real seven-screen flow, keyed by the same constants the driver uses."""
     return [
         _Step([SC._STEP_LANDING, SC._MEDICAL_GET_STARTED[0]],
               "Claims Submission Center Medical Dental Vision Spending Account"),
         _Step([SC._STEP_CLAIM_TYPE, SC._CLAIM_TYPE_NEXT[0]],
               f"I want to submit a medical claim for {SC._DOCTOR_OPTION}"),
-        _Step([SC._STEP_PATIENT, SC._PATIENT_TRIGGER[0], SC._PATIENT_NEXT[0]],
+        _Step([SC._STEP_PATIENT, SC._PATIENT_TRIGGER[0], SC._PATIENT_VALUE[0],
+               SC._PATIENT_NEXT[0]],
               "Submit a Medical Claim Patient name", options=OPTIONS),
+        _requirements_step(),
         # Every ai-flow screen renders the whole sub-step rail, which is exactly
         # why body text cannot gate these steps.
         _Step([SC._STEP_UPLOAD, SC._UPLOAD_NEXT[0], 'input[type="file"]'],
@@ -258,9 +269,10 @@ class _FakePage:
         self.polls = 0
         self.closed = closed
         self.patient_selection_sticks = patient_selection_sticks
-        # Anthem's real combobox is an <input>: the chosen name lands in its
-        # value and never appears in the page body. The flag models the other
-        # kind of widget, one that renders its selection as text.
+        # Anthem's real control is a wrapper <div> holding a hidden <input>:
+        # the chosen name lands in that input's value and never appears in the
+        # page body. The flag models the other kind of widget, one that renders
+        # its selection as text.
         self.selection_renders_as_text = selection_renders_as_text
         self.selected = ""
 
@@ -284,9 +296,15 @@ class _FakePage:
     def locator(self, sel):
         count, texts = self.step.selectors.get(sel, (0, []))
         attrs = {}
-        if sel in SC._PATIENT_TRIGGER:
-            # The combobox is an <input>; the selection lives in its value.
+        if sel in SC._PATIENT_VALUE:
+            # The hidden <input> inside the wrapper. This is the only node that
+            # ever holds the chosen name.
             attrs = {"value": self.selected}
+        elif sel in SC._PATIENT_TRIGGER:
+            # The wrapper <div>. It is not an input, so input_value() raises and
+            # value is absent — but its inner_text is the floating label, a
+            # truthy string that must never be mistaken for the selection.
+            attrs = {"text": "Patient name*\nPatient name*"}
         return _FakeLocator(self, sel, count=count, texts=texts, attrs=attrs,
                             enabled=self.polls >= self.next_enabled_after)
 
@@ -332,7 +350,8 @@ def _clicks(page):
 
 def test_step_selectors_are_the_ones_anthem_serves():
     """Literal pin of every selector verified against the live site on
-    2026-08-26.
+    2026-08-26, and — for the patient dropdown, which Anthem re-shaped — on
+    2026-09-01.
 
     The flow tests below build their fake steps *from* these constants, so they
     move in lockstep with any edit and cannot notice a wrong value. This test is
@@ -345,7 +364,14 @@ def test_step_selectors_are_the_ones_anthem_serves():
     assert SC._CLAIM_TYPE_NEXT == [
         '[data-testid="claims.claimsSubmissionFormTypeSelection.next-button"]']
     assert SC._PATIENT_TRIGGER[0] == '[data-testid="claims.patientDetails.patient-dropdown"]'
+    # A wrapper <div>; the chosen name lands in the <input> one level down.
+    assert SC._PATIENT_VALUE[0] == (
+        '[data-testid="claims.patientDetails.patient-dropdown-search"]')
     assert SC._PATIENT_NEXT == ['[data-testid="claims.patientDetails.next-button"]']
+    assert SC._REQUIREMENTS_NEXT == [
+        '[data-testid="claims.claimSubmissionRequirements.next-button"]']
+    assert SC._STEP_REQUIREMENTS == (
+        '[data-testid="claims.claimSubmissionRequirements.title"]')
     assert SC._PROCESSING_CONTINUE == ['[data-testid="claims.fileProcessor.continueButton"]']
     assert SC._UPLOAD_NEXT == ['[data-testid="stepNavigationButtons-continue-button"]']
     assert SC._STEP_LANDING == '[data-testid="claims.claimSubmissionTypes.card-list"]'
@@ -375,6 +401,7 @@ def test_happy_path_action_sequence():
         ("click", SC._PATIENT_TRIGGER[0]),     # open the dropdown
         ("click", DIEGO),                      # pick the option
         ("click", SC._PATIENT_NEXT[0]),
+        ("click", SC._REQUIREMENTS_NEXT[0]),   # the requirements interstitial
         ("upload", PDF),
         ("click", SC._UPLOAD_NEXT[0]),
         ("click", SC._PROCESSING_CONTINUE[0]),
@@ -433,19 +460,80 @@ def test_patient_selection_that_does_not_take_effect_raises():
 
 
 def test_patient_selection_is_confirmed_from_the_input_value():
-    """Regression: the chosen name goes into the combobox's value and never
-    into the page body, so a body-text check calls every successful selection
-    a failure. Verified live on 2026-08-26."""
+    """Regression: the chosen name goes into an <input> value and never into
+    the page body, so a body-text check calls every successful selection a
+    failure. Verified live on 2026-08-26."""
     page = _happy_page()                      # body never contains the name
     submit_claim.fill_wizard(page, "Diego", PDF)
     assert page.selected == DIEGO
     assert DIEGO not in page.inner_text("body")
 
 
+def test_patient_selection_is_read_from_the_inner_input_not_the_wrapper():
+    """Regression (live failure 2026-09-01): Anthem moved the
+    patient-dropdown testid off the <input> and onto a wrapper <div>, putting
+    the chosen name in a nested `-search` input instead.
+
+    Reading the wrapper yields its floating label ("Patient name*") — truthy,
+    so the old fallback chain stopped there and never reached the real value.
+    Every selection then failed the confirmation check while visibly working
+    on screen. The value selector must be a different node from the trigger.
+    """
+    assert SC._PATIENT_VALUE[0] != SC._PATIENT_TRIGGER[0]
+    page = _happy_page()
+    submit_claim.fill_wizard(page, "Diego", PDF)
+
+    # The wrapper offers only the label, and it must not satisfy the check.
+    wrapper_text = page.locator(SC._PATIENT_TRIGGER[0]).inner_text()
+    assert "Patient name" in wrapper_text and DIEGO not in wrapper_text
+    assert page.locator(SC._PATIENT_VALUE[0]).input_value() == DIEGO
+
+
+def test_selection_check_tolerates_a_late_value_commit():
+    """The name is written by a React commit, so a single read straight after
+    the click is a race. The check polls instead of sampling once."""
+    class _LatePage(_FakePage):
+        def locator(self, sel):
+            if sel in SC._PATIENT_VALUE and self.polls < 3:
+                return _FakeLocator(self, sel, count=1, attrs={"value": ""})
+            return super().locator(sel)
+
+    page = _LatePage(_flow_steps())
+    submit_claim.fill_wizard(page, "Diego", PDF)
+    assert page.selected == DIEGO
+
+
 def test_patient_selection_also_accepts_a_widget_that_renders_text():
     page = _happy_page(selection_renders_as_text=True)
     submit_claim.fill_wizard(page, "Diego", PDF)
     assert ("click", DIEGO) in page.log
+
+
+def test_clicks_through_the_claims_submission_requirements_step():
+    """Regression (live failure 2026-09-01): Anthem inserted a "Claims
+    submission requirements" interstitial between the patient page and the
+    upload page. Next on the patient step worked fine — it just landed
+    somewhere the driver was not waiting for, so the run timed out looking for
+    the dropzone and the user saw a wizard that had stopped dead."""
+    page = _happy_page()
+    submit_claim.fill_wizard(page, "Diego", PDF)
+    clicks = _clicks(page)
+    assert SC._REQUIREMENTS_NEXT[0] in clicks
+    assert clicks.index(SC._PATIENT_NEXT[0]) < clicks.index(SC._REQUIREMENTS_NEXT[0])
+    assert clicks.index(SC._REQUIREMENTS_NEXT[0]) < clicks.index(SC._UPLOAD_NEXT[0])
+    assert ("upload", PDF) in page.log
+
+
+def test_requirements_step_is_optional():
+    """It is an interstitial, not a form. If Anthem stops showing it — or shows
+    it only on a first submission — the run must go straight to the upload page
+    rather than timing out waiting for a screen that will never come."""
+    steps = [s for s in _flow_steps()
+             if SC._STEP_REQUIREMENTS not in s.selectors]
+    page = _FakePage(steps)
+    submit_claim.fill_wizard(page, "Diego", PDF)
+    assert ("upload", PDF) in page.log
+    assert SC._REQUIREMENTS_NEXT[0] not in _clicks(page)
 
 
 def test_does_not_skip_the_processing_step_on_shared_rail_text():

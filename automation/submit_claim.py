@@ -2,10 +2,10 @@
 File an out-of-network medical claim with Anthem.
 
 Drives Anthem's claim wizard as far as the upload step: Medical → "Doctor or
-other medical specialist" → patient → upload the PDF → wait out Anthem's file
-processing. Then STOPS on the "Claim details" step and hands the browser to the
-user, who checks the extracted data, completes the remaining steps and clicks
-Submit. Nothing is ever filed without a human.
+other medical specialist" → patient → claims submission requirements → upload
+the PDF → wait out Anthem's file processing. Then STOPS on the "Claim details"
+step and hands the browser to the user, who checks the extracted data, completes
+the remaining steps and clicks Submit. Nothing is ever filed without a human.
 
 Stopping there is not just caution about filing. "Claim details" is where
 Anthem shows what *its* extraction read off the PDF ("Here's what we found in
@@ -78,7 +78,17 @@ _PATIENT_TRIGGER = [
     '[role="combobox"][aria-label*="Patient name" i]',
     '[role="combobox"]',
 ]
+# The node that HOLDS the chosen name, which is not the node you click.
+# `patient-dropdown` is a wrapper <div>; the value lives in the <input> one
+# level down, and that input drops its role and aria-label once the menu
+# closes, so it can only be reached by its own testid or by descent.
+_PATIENT_VALUE = [
+    '[data-testid="claims.patientDetails.patient-dropdown-search"]',
+    '[data-testid="claims.patientDetails.patient-dropdown"] input',
+    'input[role="combobox"]',
+]
 _PATIENT_NEXT = ['[data-testid="claims.patientDetails.next-button"]']
+_REQUIREMENTS_NEXT = ['[data-testid="claims.claimSubmissionRequirements.next-button"]']
 _UPLOAD_DROPZONE_BUTTON = [
     '[data-testid="documentUpload-document-documentUpload-dropZone-select-button"]',
 ]
@@ -97,6 +107,10 @@ _UPLOAD_BUTTON = ["Select document(s) to upload", "Select Document(s) to Upload"
 _STEP_LANDING = '[data-testid="claims.claimSubmissionTypes.card-list"]'
 _STEP_CLAIM_TYPE = '[data-testid="claims.claimsSubmissionFormTypeSelection.options-card"]'
 _STEP_PATIENT = '[data-testid="claims.patientDetails.patient-dropdown"]'
+# "Claims submission requirements" — a read-only interstitial Anthem inserted
+# between the patient page and the upload page (seen 2026-09-01). Nothing on it
+# to fill in, but the wizard will not move past it on its own.
+_STEP_REQUIREMENTS = '[data-testid="claims.claimSubmissionRequirements.title"]'
 _STEP_UPLOAD = '[data-testid="documentUpload-document-documentUpload-dropZone"]'
 _STEP_PROCESSING = '[data-testid="claims.fileProcessor.continueButton"]'
 _STEP_CLAIM_DETAILS = '[data-testid="groupRenderer-claimDetailsFound.title"]'
@@ -216,30 +230,47 @@ def _raise_if_draft_blocked(body: str) -> None:
         )
 
 
+def _wait_for_any_step(page: Page, steps: dict[str, str], what: str,
+                       timeout_ms: int = 30_000, poll_ms: int = 500,
+                       clock=time.monotonic) -> str:
+    """Block until one of several step gates exists; return its key.
+
+    Anthem adds and removes interstitials without warning (the "Claims
+    submission requirements" screen appeared between the patient and upload
+    steps in 2026-09), so a step that may or may not be there has to be waited
+    for alongside the one after it rather than gated on alone.
+
+    Draft-blocking is checked on every poll: Anthem answers a blocked claim by
+    diverting to the draft list, where none of these steps will ever appear.
+    """
+    deadline = clock() + timeout_ms / 1000
+    while True:
+        for key, selector in steps.items():
+            try:
+                if page.locator(selector).count() > 0:
+                    return key
+            except Exception:
+                pass
+        _raise_if_draft_blocked(_body_text(page))
+        if clock() >= deadline:
+            raise RuntimeError(
+                f"Timed out waiting for {what} (looking for "
+                f"{' or '.join(steps.values())}) after {timeout_ms // 1000}s. "
+                f"Current URL: {page.url}. "
+                "Update submit_claim.py if Anthem changed their wizard."
+            )
+        page.wait_for_timeout(poll_ms)
+
+
 def _wait_for_step(page: Page, selector: str, what: str, timeout_ms: int = 30_000,
                    poll_ms: int = 500, clock=time.monotonic) -> None:
     """Block until `selector` — a control unique to one wizard step — exists.
 
     The selector form of _wait_for_page, and the right gate for the ai-flow
-    steps, whose body text is not step-specific. Draft-blocking is still checked
-    on every poll: Anthem answers a blocked claim by diverting to the draft list,
-    where the step we are waiting for will simply never appear.
+    steps, whose body text is not step-specific.
     """
-    deadline = clock() + timeout_ms / 1000
-    while True:
-        try:
-            if page.locator(selector).count() > 0:
-                return
-        except Exception:
-            pass
-        _raise_if_draft_blocked(_body_text(page))
-        if clock() >= deadline:
-            raise RuntimeError(
-                f"Timed out waiting for {what} (looking for {selector}) after "
-                f"{timeout_ms // 1000}s. Current URL: {page.url}. "
-                "Update submit_claim.py if Anthem changed their wizard."
-            )
-        page.wait_for_timeout(poll_ms)
+    _wait_for_any_step(page, {what: selector}, what, timeout_ms=timeout_ms,
+                       poll_ms=poll_ms, clock=clock)
 
 
 def _click_text(page: Page, texts: list[str], name: str) -> None:
@@ -412,41 +443,61 @@ def _select_patient(page: Page, member: str) -> str:
 
 
 def _control_value(page: Page, selectors: list[str]) -> str:
-    """The current value of a form control, whichever way it stores one."""
-    for sel in selectors:
+    """The current value of a form control, whichever way it stores one.
+
+    Two passes, and the order matters. inner_text() is checked only after every
+    selector's real value has been tried, because a wrapper element's inner_text
+    is its floating label — a truthy string that is not a value. Returning it
+    early is what made the 2026-09-01 failure silent: the first selector
+    answered "Patient name*" and the fallbacks were never reached.
+    """
+    def _resolve(sel):
         try:
             loc = page.locator(sel).first
-            if loc.count() == 0:
-                continue
+            return loc if loc.count() else None
         except Exception:
-            continue
-        for read in (lambda: loc.input_value(timeout=2_000),
-                     lambda: loc.get_attribute("value"),
-                     lambda: loc.inner_text()):
-            try:
-                value = read()
-            except Exception:
-                continue
-            if value:
-                return value
+            return None
+
+    found = [loc for loc in (_resolve(s) for s in selectors) if loc is not None]
+    for reads in ((lambda loc: loc.input_value(timeout=2_000),
+                   lambda loc: loc.get_attribute("value")),
+                  (lambda loc: loc.inner_text(),)):
+        for loc in found:
+            for read in reads:
+                try:
+                    value = read(loc)
+                except Exception:
+                    continue
+                if value:
+                    return value
     return ""
 
 
-def _selection_took(page: Page, chosen: str) -> bool:
+def _selection_took(page: Page, chosen: str, attempts: int = 20,
+                    poll_ms: int = 250) -> bool:
     """Confirm the patient click landed — a click that hits nothing is silent.
 
-    The chosen name goes into the combobox's `value`, and inner_text() never
-    returns input values, so checking the page body reports every successful
-    selection as a failure. Read the control itself, and fall back to the body
-    for a widget that renders its selection as text.
+    Reads _PATIENT_VALUE, not _PATIENT_TRIGGER: the name goes into the <input>
+    nested inside the wrapper you click, and inner_text() never returns input
+    values, so both the wrapper and the page body report every successful
+    selection as a failure. The body is still checked as a fallback, for a
+    widget that renders its selection as text.
+
+    Polls rather than sampling once. React writes the value on a commit after
+    the click event, so a single immediate read races it; attempts × poll_ms is
+    the window that race gets.
     """
     first, _ = _normalize_name(chosen)
     if not first:
         return True
-    haystacks = (_control_value(page, _PATIENT_TRIGGER), _body_text(page))
-    return any(
-        first in re.sub(r"[^a-z0-9 ]", "", (h or "").lower()) for h in haystacks
-    )
+    for attempt in range(attempts):
+        haystacks = (_control_value(page, _PATIENT_VALUE), _body_text(page))
+        if any(first in re.sub(r"[^a-z0-9 ]", "", (h or "").lower())
+               for h in haystacks):
+            return True
+        if attempt < attempts - 1:
+            page.wait_for_timeout(poll_ms)
+    return False
 
 
 # ── The wizard ───────────────────────────────────────────────────────────────
@@ -480,9 +531,21 @@ def fill_wizard(page: Page, member: str, pdf_path: str, dry_run: bool = False) -
     _click_selector(page, _PATIENT_NEXT, "the Next button (patient)",
                     fallback_texts=_NEXT_BUTTON)
 
-    # 4. Upload files. This is the step that creates Anthem's draft, so
-    #    everything above it is repeatable and everything below it is not.
-    _wait_for_step(page, _STEP_UPLOAD, "the upload page")
+    # 4. "Claims submission requirements" — a read-only interstitial with
+    #    nothing to fill in, which Anthem inserted here in 2026-09. Treated as
+    #    optional because it is exactly the kind of screen that comes and goes
+    #    (and may only appear on a first submission): wait for it or the upload
+    #    page, whichever arrives, so its removal doesn't hang the run either.
+    if _wait_for_any_step(page, {"requirements": _STEP_REQUIREMENTS,
+                                 "upload": _STEP_UPLOAD},
+                          "the requirements or upload page") == "requirements":
+        _click_selector(page, _REQUIREMENTS_NEXT,
+                        "the Next button (submission requirements)",
+                        fallback_texts=_NEXT_BUTTON)
+
+        # 5. Upload files. This is the step that creates Anthem's draft, so
+        #    everything above it is repeatable and everything below it is not.
+        _wait_for_step(page, _STEP_UPLOAD, "the upload page")
     _upload_document(page, pdf_path)
     print("Uploaded the claim PDF.")
     _click_selector(page, _UPLOAD_NEXT, "the Next button (upload)",
