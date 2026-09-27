@@ -155,3 +155,30 @@ def test_still_blank_after_a_cache_clear_raises_a_diagnostic_error():
     assert page.loads == 2, "should have retried exactly once"
     assert "_EXPORT_SELECTORS" in message and "fetch_claims.py" in message
     assert "cache" in message.lower(), "error should say the cache retry was already tried"
+
+
+# ── signed out (regression 2026-09-26) ───────────────────────────────────────
+
+class _SignedOutPage(_FakePage):
+    """The claims app 401s on bootstrap and Anthem bounces to the public site."""
+
+    def goto(self, url, **_kw):
+        self.loads += 1
+        self.url = "https://www.anthem.com/"
+
+
+def test_signed_out_claims_page_raises_session_rejected_without_clearing_cache():
+    page = _SignedOutPage(renders_after_loads=99)
+
+    with pytest.raises(fetch_claims.auth.SessionRejectedError):
+        fetch_claims.download_claims_csv(page)
+
+    assert page.cache_clears == 0, "a sign-out is not a poisoned cache"
+    assert page.clicks == 0
+
+
+def test_export_selectors_do_not_match_app_promo_links():
+    """The public site's "Download the Sydney Health App" links matched these
+    and got clicked in place of Export."""
+    for sel in fetch_claims._EXPORT_SELECTORS:
+        assert sel not in ('a:has-text("Download")', '[aria-label*="download" i]'), sel

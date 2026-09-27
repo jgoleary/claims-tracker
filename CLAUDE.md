@@ -153,10 +153,10 @@ was filed, so `submitted_date` is still set only by the user's own confirmation.
 ### Anthem claim filing
 
 `automation/submit_claim.py` drives Anthem's out-of-network medical claim wizard: Medical
-→ "Doctor or other medical specialist" → patient → upload the PDF → wait out Anthem's file
-processing. It then **stops on the "Claim details" step** and holds the browser open (15
-min) for the user to complete the remaining steps and click Submit. Nothing is ever filed
-without a human.
+→ "Doctor or other medical specialist" → patient → claims submission requirements → upload
+the PDF → wait out Anthem's file processing. It then **stops on the "Claim details" step**
+and holds the browser open (15 min) for the user to complete the remaining steps and click
+Submit. Nothing is ever filed without a human.
 
 "Claim details" is where Anthem shows what _its own_ extraction read off the PDF ("Here's
 what we found in your claim") — provider NPI, tax ID, diagnosis and procedure codes,
@@ -185,10 +185,17 @@ Started" while nothing clickable held it. Write selectors against `data-testid`;
   browser open on the dropdown. Anthem **dropped the trailing `(MM/DD/YYYY)`** from these
   options in the redesign, so surnames are now the only thing separating two household
   members who share a first name.
-- The patient control is an `<input role="combobox">`: the chosen name lands in its
-  `value`, not in the page body. `_selection_took()` therefore reads the control (via
-  `_control_value`), because `inner_text("body")` reports every successful selection as a
-  failure.
+- The patient control is a **wrapper `<div role="combobox">` (`_PATIENT_TRIGGER`) holding
+  a separate `<input>` (`_PATIENT_VALUE`, testid `…patient-dropdown-search`)**. You click
+  the wrapper; the chosen name lands in the inner input's `value`, never in the page body.
+  `_selection_took()` therefore reads `_PATIENT_VALUE`, not the node it clicked. Reading
+  the wrapper instead returns its floating label, `"Patient name*"` — a truthy string that
+  is not a value, which is why `_control_value()` now tries every selector's real value
+  before it will fall back to any `inner_text()`. Anthem moved this testid off the
+  `<input>` and onto the wrapper in 2026-09; the symptom was that every selection failed
+  the confirmation check while visibly working on screen.
+- The name is written by a React commit **after** the click event, so `_selection_took()`
+  polls (20 × 250ms) rather than reading once.
 - `CLAIM_DRY_RUN=1` stops before the upload — uploading is what makes Anthem save a draft,
   so everything above it is repeatable. Use it to exercise login, the card, the claim-type
   radio and the patient matcher against the real site with no side effects.
@@ -196,6 +203,14 @@ Started" while nothing clickable held it. Write selectors against `data-testid`;
   `_STEP_*` constants) before acting. Body text cannot gate these steps: every ai-flow
   page renders the entire sub-step rail ("Upload files … Processing files … Claim details
   …"), so waiting for the text "Claim details" returns true while still on Processing.
+  Every URL in the ai-flow is the same too, so the URL is no signal either.
+- **"Claims submission requirements" (`_STEP_REQUIREMENTS`) sits between the patient page
+  and the upload page.** Anthem inserted it in 2026-09; there is nothing on it to fill in,
+  but the wizard will not move past it on its own. It is handled as **optional** —
+  `_wait_for_any_step()` waits for it _or_ the upload page and clicks through it only if
+  it appeared — because an interstitial that can be added can also be removed or shown
+  only once, and gating on it alone would hang the run the day it stops appearing. Use
+  `_wait_for_any_step` for any step of that kind.
 - **Anthem allows only one draft claim at a time.** Any abandoned or failed run leaves a
   draft behind, and Anthem then refuses to start a new claim ("You must continue or delete
   your draft submissions before you can submit a new claim"), diverting the wizard to the
@@ -264,15 +279,33 @@ needed.
   `EOFError` on the prompt when there's no TTY. `login(page, user, pass)` handles Anthem's
   Okta SSO (two-step: identifier → Next → password → submit → MFA wait). Browser opens
   non-headless for MFA. Session cookies persist in `data/browser-profile/` so MFA is only
-  required once (until the Okta session expires).
+  required once (until the Okta session expires). `login()` returns only once
+  `is_signed_in_url()` holds — a `/member/` page **outside `/member/public/`**. Since
+  2026-09 the OAuth hand-off has two hops (`/member/public/auth-redirect`, then
+  `/member/public/authentication/oauth-callback`); leaving the second one early (a `goto`
+  to the claims page) abandons the code exchange, the portal's `web/bootstrap` call 401s,
+  and Anthem signs the browser out to `logout.html` → `www.anthem.com`. It looks like a
+  rejected session, and a fresh profile + MFA does not fix it. `check_session_alive(page)`
+  raises `SessionRejectedError` when a page has been bounced off
+  `membersecure.anthem.com`; the fetch scripts call it when their wait fails, so a
+  sign-out is reported as one instead of as a missing selector.
 - **`fetch_claims.py`** — navigates to the claims summary page, clicks Export, saves
   `data/exports/claims-YYYY-MM-DD-HHMM.csv`, POSTs to `/api/ingest/claims-csv`. Gates on
   the Export button rendering (`_wait_for_export`) before clicking; if it never appears,
   clears the HTTP cache and reloads once before failing (see Poisoned browser cache).
-- **`fetch_benefits.py`** — navigates to the benefits page, reads `#ant-tab-body-1-0`
-  (in-network) and `#ant-tab-body-1-1` (OON) directly by tab body ID. Extracts amounts
-  from `.progress-bar-amount .label-text` spans and limits from
-  `span:has-text("Your limit is $")`. POSTs to `/api/ingest/benefits`.
+  `_EXPORT_SELECTORS` deliberately has no bare "Download" link or aria-label: the public
+  site's "Download the Sydney Health App" promo links matched those, so a signed-out page
+  passed the wait and the click opened a new tab instead of exporting.
+- **`fetch_benefits.py`** — navigates to the benefits page (which redirects to
+  `/member/benefits/landing`) and reads the "Plan details & progress" section: in each of
+  the `Deductible` and `OutOfPocketMaximum` sections (`_SECTION`), one progress card
+  (`_CARD`) per network, told apart by its `networkDisplay` label ("Participating Network"
+  / "Out of Network", `_NETWORKS`), with limit in `totalValue` and spent in `spentValue`.
+  Anthem rebuilt this page as a react-native-web micro-app on 2026-09-25, replacing the
+  Angular tabs (`#ant-tab-body-1-*`, `.progress-bar-amount`); both networks are now on one
+  page, so there is no tab click. The accordions start collapsed, so it reads with
+  `text_content()` (not `inner_text()`) and waits for `state="attached"`. POSTs to
+  `/api/ingest/benefits`.
 - **`fetch_all.py`** — single login, runs both scripts. Spawned by
   `POST /api/automation/run`.
 - **`submit_claim.py`** — drives Anthem's claim-submission wizard through the PDF upload,
@@ -295,10 +328,16 @@ console before touching selectors, and delete `data/browser-profile` if a cache 
 isn't enough.
 
 **Selector maintenance:** If Anthem changes their UI, update `_EXPORT_SELECTORS` in
-`fetch_claims.py`, the tab/amount selectors in `fetch_benefits.py`, or the
-`_MEDICAL_GET_STARTED` / `_PATIENT_TRIGGER` / `_UPLOAD_*` / `_PROCESSING_CONTINUE` and
-`_STEP_*` constants in `submit_claim.py`. Every failure message names the file and
-constant to edit.
+`fetch_claims.py`, `_SECTION` / `_CARD` / `_NETWORKS` in `fetch_benefits.py`, or the
+`_MEDICAL_GET_STARTED` / `_PATIENT_TRIGGER` / `_PATIENT_VALUE` / `_REQUIREMENTS_NEXT` /
+`_UPLOAD_*` / `_PROCESSING_CONTINUE` and `_STEP_*` constants in `submit_claim.py`. Every
+failure message names the file and constant to edit.
+
+A control's **clickable** node and its **value-bearing** node are not always the same
+element, and Anthem has moved a testid between the two. When a selection appears to work
+on screen but the script says it didn't, dump the wrapper's descendants before touching
+anything else — the value is usually in a nested `<input>` whose `value` property (not its
+`value` attribute, and never `inner_text`) holds it.
 
 Don't guess the new markup — **run `automation/probe_claim_wizard.py` and look**. It logs
 in, opens the wizard and dumps the live page (URL, title, full body text, every clickable

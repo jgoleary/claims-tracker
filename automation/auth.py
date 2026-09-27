@@ -3,6 +3,7 @@ import getpass
 import os
 import sys
 import time
+from urllib.parse import urlparse
 
 from playwright.sync_api import BrowserContext, Page, Playwright
 
@@ -87,6 +88,36 @@ def check_for_site_error(page: Page) -> None:
         )
 
 
+# Every signed-in member page lives on this host.
+_MEMBER_HOST = "membersecure.anthem.com"
+
+
+class SessionRejectedError(RuntimeError):
+    """Anthem signed us out after a login that appeared to succeed."""
+
+
+def check_session_alive(page: Page) -> None:
+    """Raise SessionRejectedError if Anthem has bounced us off the member portal.
+
+    Observed 2026-09-26: Okta accepted the login and redirected back, then the
+    portal's bootstrap API answered 401 "Authentication error" and the app sent
+    the browser to logout.html and on to the public www.anthem.com home page.
+    Nothing on that page is ours, so without this check the next step waits on
+    selectors that can never appear (or, worse, matches a public-site look-alike)
+    and fails with an error that points at the wrong thing.
+    """
+    url = page.url or ""
+    if "logout.html" in url or urlparse(url).hostname != _MEMBER_HOST:
+        raise SessionRejectedError(
+            "Anthem signed the session out right after login "
+            f"(the browser ended up at {url}). The portal rejected a session Okta "
+            "had accepted — either an outage on Anthem's end, or stale cookies in "
+            f"{PROFILE_DIR}. Check that the portal works in a normal browser; if it "
+            "does, move that profile directory aside and run again (MFA will be "
+            "needed once)."
+        )
+
+
 
 
 # Markers that Anthem has served a signed-in page.
@@ -117,6 +148,20 @@ def _any_present(page: Page, selectors: list[str]) -> bool:
     return False
 
 
+def is_signed_in_url(url: str) -> bool:
+    """True for a member page, False while the OAuth hand-off is still in flight.
+
+    Everything under /member/public/ is part of that hand-off: auth-redirect,
+    and — since 2026-09 — a second hop, authentication/oauth-callback, where the
+    app exchanges the code for the session. Leaving that page early (a goto to
+    the claims page, say) abandons the exchange; the next API call then 401s and
+    Anthem signs the browser out to logout.html. Only a /member/ page outside
+    /member/public/ (the dashboard, normally) means the session is established.
+    """
+    path = urlparse(url).path
+    return path.startswith("/member/") and not path.startswith("/member/public/")
+
+
 def wait_for_login_or_session(page: Page, timeout_ms: int = 15_000, poll_ms: int = 500,
                               clock=time.monotonic) -> str:
     """Return "session" if we're already signed in, else "form".
@@ -129,7 +174,7 @@ def wait_for_login_or_session(page: Page, timeout_ms: int = 15_000, poll_ms: int
     unrecognized page behaves as it always did and the form flow raises its own
     clear error.
     """
-    if "/member/" in page.url and "auth-redirect" not in page.url:
+    if is_signed_in_url(page.url):
         return "session"
 
     deadline = clock() + timeout_ms / 1000
@@ -185,13 +230,11 @@ def login(page: Page, username: str, password: str, mfa_timeout: int = 120_000) 
     print("Waiting for login to complete (complete MFA in the browser if prompted)…")
     page.wait_for_url(MEMBER_URL_PATTERN, timeout=mfa_timeout)
 
-    # auth-redirect exchanges the OAuth code for session cookies — wait for it to finish.
-    if "auth-redirect" in page.url:
+    # The OAuth hops (auth-redirect, then oauth-callback) establish the session —
+    # wait until the app has left them for a signed-in page.
+    if not is_signed_in_url(page.url):
         print("Completing auth redirect…")
-        page.wait_for_url(
-            lambda url: "/member/" in url and "auth-redirect" not in url,
-            timeout=30_000,
-        )
+        page.wait_for_url(is_signed_in_url, timeout=30_000)
 
     page.wait_for_load_state("domcontentloaded", timeout=15_000)
     check_for_site_error(page)

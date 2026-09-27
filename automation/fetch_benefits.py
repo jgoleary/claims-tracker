@@ -1,6 +1,5 @@
 """Scrape the Anthem benefits page and ingest deductible/OOP totals into the backend."""
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -18,23 +17,22 @@ BENEFITS_URL = "https://membersecure.anthem.com/member/benefits?covtype=med"
 BACKEND_URL = "http://localhost:8000"
 DATA_DIR = Path("data/exports")
 
-# Tab body IDs in Anthem's Angular SPA.
-_IN_NETWORK_TAB_ID = "ant-tab-body-1-0"
-_OON_TAB_ID = "ant-tab-body-1-1"
+# Anthem rebuilt this page as a react-native-web micro-app (release 2026-09-25):
+# ?covtype=med now redirects to /member/benefits/landing, and the Angular tab
+# bodies (#ant-tab-body-1-*) and .progress-bar-amount spans are gone. The "Plan
+# details & progress" section lists both networks side by side, so no tab click
+# is needed. Select by data-testid only — the css-*/r-* classes change per build.
+_SECTION = '[data-testid="benefits.planDetailsSection.section-{}"]'
+_DEDUCTIBLE = "Deductible"
+_OOP = "OutOfPocketMaximum"
+_CARD = '[data-testid="benefits.networkProgressCard.card"]'
+_CARD_FIELD = '[data-testid="benefits.networkProgressCard.{}"]'
 
-# Selectors to click the Out-of-Network tab (loads OON data on demand).
-# The tab button carries aria-controls="<panel id>", a stable link to the panel
-# we scrape — prefer it over text matching (Anthem's label reads "Out of Network").
-_OON_TAB_CLICK = [
-    f'[role="tab"][aria-controls="{_OON_TAB_ID}"]',
-    '[role="tab"]:has-text("Out of Network")',
-    '[role="tab"]:has-text("Out-of-Network")',
-    'button:has-text("Out of Network")',
-]
-
-# A tab's benefit amounts have rendered once this selector resolves inside it.
-def _amounts_selector(tab_id: str) -> str:
-    return f"#{tab_id} .progress-bar-amount .label-text"
+# Card network label ("Participating Network: $3,400.00") → output key.
+_NETWORKS = {
+    "in_network": "Participating Network",
+    "out_of_network": "Out of Network",
+}
 
 
 def scrape_benefits(page: Page) -> dict:
@@ -43,109 +41,66 @@ def scrape_benefits(page: Page) -> dict:
     page.goto(BENEFITS_URL, wait_until="domcontentloaded", timeout=30_000)
     auth.check_for_site_error(page)
 
-    # Wait for the Angular app to finish rendering benefit cards.
     print("  Waiting for benefit data to render…")
-    page.wait_for_selector(".progress-bar-amount", timeout=30_000)
-
-    # Scrape in-network (the default visible tab).
-    in_net = _scrape_tab(page, _IN_NETWORK_TAB_ID, "in-network")
-
-    # Click the Out-of-Network tab to trigger its data load, then scrape.
-    _click_oon_tab(page)
-    out_of_net = _scrape_tab(page, _OON_TAB_ID, "out-of-network")
-
-    return {"in_network": in_net, "out_of_network": out_of_net}
-
-
-def _click_oon_tab(page: Page) -> None:
-    for sel in _OON_TAB_CLICK:
-        try:
-            el = page.wait_for_selector(sel, timeout=5_000, state="visible")
-            if el:
-                el.click()
-                # OON content renders lazily on activation — wait for the panel's
-                # own amounts to appear rather than guessing a fixed delay.
-                try:
-                    page.wait_for_selector(_amounts_selector(_OON_TAB_ID), timeout=10_000)
-                except Exception:
-                    page.wait_for_timeout(800)
-                return
-        except Exception:
-            continue
-    print("  Note: Out-of-Network tab not found; attempting to read current view.")
-
-
-def _scrape_tab(page: Page, tab_id: str, label: str) -> dict:
-    """
-    Scrape deductible and OOP max from the given tab body element.
-
-    Anthem's Angular component layout within each tab:
-      - 'Your limit is $X' span — one per benefit category (deductible first, OOP second)
-      - .progress-bar-amount .label-text spans — two per category (spent, remaining):
-          [0]=ded_spent  [1]=ded_remaining  [2]=oop_spent  [3]=oop_remaining
-    """
-    print(f"  Scraping {label}…")
-    tab = page.locator(f"#{tab_id}")
-
-    # Wait for this panel's amounts to render. The default tab is ready on page
-    # load, but the OON panel renders lazily after its tab is activated, so an
-    # immediate read can race ahead of Angular and find nothing.
     try:
-        page.wait_for_selector(_amounts_selector(tab_id), timeout=10_000)
+        # The accordions start collapsed (height 0) but their cards are in the
+        # DOM, so wait for attachment, not visibility.
+        page.wait_for_selector(
+            f"{_SECTION.format(_DEDUCTIBLE)} {_CARD}", state="attached", timeout=30_000
+        )
     except Exception:
-        pass  # fall through to the count check below for a clear, diagnostic error
-
-    limit_spans = tab.locator('span:has-text("Your limit is $")').all()
-    amount_spans = tab.locator(".progress-bar-amount .label-text").all()
-
-    if len(amount_spans) < 2:
-        tab_present = tab.count() > 0
-        bars = tab.locator(".progress-bar-amount").count() if tab_present else 0
+        auth.check_session_alive(page)
         raise RuntimeError(
-            f"Could not find benefit amounts for {label} "
-            f"(found {len(amount_spans)} .progress-bar-amount .label-text spans; "
-            f"tab #{tab_id} present={tab_present}, .progress-bar-amount divs={bars}). "
-            "If the tab is present but empty, the panel did not render in time or "
-            "the tab did not activate; otherwise update selectors in fetch_benefits.py."
+            "No deductible cards on the benefits page "
+            f"({page.url}). Update _SECTION / _CARD in fetch_benefits.py to match "
+            "Anthem's current UI."
         )
 
-    def get_text(spans: list, idx: int) -> str:
-        if idx < len(spans):
-            return (spans[idx].text_content(timeout=2_000) or "").strip()
-        return ""
-
-    def get_limit(card_idx: int) -> str:
-        text = get_text(limit_spans, card_idx)
-        m = re.search(r"\$([\d,]+(?:\.\d{1,2})?)", text)
-        if m:
-            return f"${m.group(1)}"
-        # Fallback: compute from spent + remaining amounts.
-        spent_val = _parse_dollar(get_text(amount_spans, card_idx * 2))
-        rem_val = _parse_dollar(get_text(amount_spans, card_idx * 2 + 1))
-        if spent_val is not None and rem_val is not None:
-            return f"${spent_val + rem_val:,.2f}"
-        return "unknown"
-
-    # Determine whether there are two distinct benefit cards or just one.
-    has_oop = len(amount_spans) >= 3
-
+    deductible = _read_section(page, _DEDUCTIBLE)
+    oop = _read_section(page, _OOP)
     return {
-        "deductible_spent": get_text(amount_spans, 0),
-        "deductible_limit": get_limit(0),
-        "oop_spent": get_text(amount_spans, 2) if has_oop else get_text(amount_spans, 0),
-        "oop_limit": get_limit(1) if has_oop and len(limit_spans) >= 2 else get_limit(0),
+        key: {
+            "deductible_spent": deductible[key]["spent"],
+            "deductible_limit": deductible[key]["limit"],
+            "oop_spent": oop[key]["spent"],
+            "oop_limit": oop[key]["limit"],
+        }
+        for key in _NETWORKS
     }
 
 
-def _parse_dollar(text: str) -> float | None:
-    """Parse '$3,162.24' → 3162.24."""
-    m = re.search(r"[\d,]+(?:\.\d{1,2})?", text.replace("$", ""))
-    if m:
-        try:
-            return float(m.group().replace(",", ""))
-        except ValueError:
-            pass
-    return None
+def _read_section(page: Page, section: str) -> dict[str, dict[str, str]]:
+    """{network key: {"limit", "spent"}} from one section's progress cards.
+
+    text_content(), not inner_text(): the section is a collapsed accordion, and
+    inner_text() reads nothing from a hidden node.
+    """
+    cards = page.locator(f"{_SECTION.format(section)} {_CARD}")
+    found: dict[str, dict[str, str]] = {}
+    for i in range(cards.count()):
+        card = cards.nth(i)
+        network = _field(card, "networkDisplay")
+        for key, label in _NETWORKS.items():
+            # First card per network wins — the family row, which is what the
+            # plan's accumulators track.
+            if network.startswith(label) and key not in found:
+                found[key] = {
+                    "limit": _field(card, "totalValue"),
+                    "spent": _field(card, "spentValue"),
+                }
+
+    missing = [_NETWORKS[k] for k in _NETWORKS if k not in found]
+    if missing:
+        raise RuntimeError(
+            f"Benefits section {section!r} has no card for {', '.join(missing)} "
+            f"({cards.count()} cards found). Update _SECTION / _CARD / _NETWORKS in "
+            "fetch_benefits.py to match Anthem's current UI."
+        )
+    return found
+
+
+def _field(card, name: str) -> str:
+    return (card.locator(_CARD_FIELD.format(name)).first.text_content(timeout=2_000) or "").strip()
 
 
 def save_benefits(data: dict) -> Path:

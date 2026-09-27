@@ -149,3 +149,90 @@ def test_login_still_fills_the_form_when_there_is_no_session(monkeypatch):
 
     auth.login(_Page(), "user", "pw")
     assert calls == ["fill", "click", "fill", "click"]
+
+
+# ── OAuth hand-off (regression 2026-09-26) ───────────────────────────────────
+#
+# Anthem added a second hop after auth-redirect:
+# /member/public/authentication/oauth-callback, where the app exchanges the code
+# for the session. login() accepted any /member/ URL as "done", returned there,
+# and the caller's goto to the claims page abandoned the exchange — the next
+# bootstrap call 401'd and Anthem signed the browser out to logout.html.
+
+CALLBACK_URL = ("https://membersecure.anthem.com/member/public/authentication/"
+                "oauth-callback?code=abc&state=xyz")
+MEMBER_REDIRECT_URL = "https://membersecure.anthem.com/member/public/auth-redirect?code=abc"
+
+
+@pytest.mark.parametrize("url", [CALLBACK_URL, MEMBER_REDIRECT_URL, REDIRECT_URL, LOGIN_URL])
+def test_oauth_hand_off_urls_are_not_signed_in(url):
+    assert not auth.is_signed_in_url(url)
+
+
+@pytest.mark.parametrize("url", [
+    MEMBER_URL,
+    "https://membersecure.anthem.com/member/dashboard",
+    "https://membersecure.anthem.com/member/claims/summary",
+])
+def test_member_pages_are_signed_in(url):
+    assert auth.is_signed_in_url(url)
+
+
+def test_oauth_callback_url_is_not_yet_a_session():
+    page = _FakePage(CALLBACK_URL, [_blank()])
+    ticks = iter(range(0, 1000))
+    assert auth.wait_for_login_or_session(
+        page, timeout_ms=100, poll_ms=1, clock=lambda: next(ticks)) == "form"
+
+
+def test_login_waits_past_the_oauth_callback(monkeypatch):
+    """login() must not return while still on the oauth-callback hop."""
+    monkeypatch.setattr(auth, "wait_for_login_or_session", lambda page, **k: "form")
+    monkeypatch.setattr(auth, "_fill_first", lambda *a, **k: None)
+    monkeypatch.setattr(auth, "_click_first", lambda *a, **k: None)
+    monkeypatch.setattr(auth, "check_for_site_error", lambda page: None)
+
+    class _Page:
+        # Where the MFA wait (MEMBER_URL_PATTERN) first lets go.
+        url = CALLBACK_URL
+        waited_with = []
+
+        def goto(self, *a, **k):
+            pass
+
+        def wait_for_url(self, pred, **k):
+            self.waited_with.append(pred)
+            if callable(pred):
+                assert not pred(CALLBACK_URL)
+                self.url = "https://membersecure.anthem.com/member/dashboard"
+                assert pred(self.url)
+
+        def wait_for_load_state(self, *a, **k):
+            pass
+
+    page = _Page()
+    auth.login(page, "user", "pw")
+    assert page.url.endswith("/member/dashboard")
+    assert any(callable(p) for p in page.waited_with), "never waited out the callback"
+
+
+@pytest.mark.parametrize("url", [
+    "https://membersecure.anthem.com/logout.html?brandCd=abcbs",
+    "https://www.anthem.com/",
+])
+def test_signed_out_page_raises_session_rejected(url):
+    class _Page:
+        pass
+
+    page = _Page()
+    page.url = url
+    with pytest.raises(auth.SessionRejectedError) as exc:
+        auth.check_session_alive(page)
+    assert url in str(exc.value)
+
+
+def test_member_page_passes_the_session_check():
+    class _Page:
+        url = "https://membersecure.anthem.com/member/claims/summary"
+
+    auth.check_session_alive(_Page())

@@ -17,14 +17,15 @@ BACKEND_URL = "http://localhost:8000"
 DATA_DIR = Path("data/exports")
 
 # Selectors for the Export button. Update if Anthem changes their UI.
+# No bare "Download" link or aria-label: the site chrome carries several
+# "Download the Sydney Health App" promo links, and on 2026-09-26 those matched
+# on a signed-out page, so the wait passed and the click opened a new tab.
 _EXPORT_SELECTORS = [
     'button:has-text("Export")',
     'a:has-text("Export")',
     'button:has-text("Download")',
-    'a:has-text("Download")',
     '[data-testid*="export" i]',
     '[aria-label*="export" i]',
-    '[aria-label*="download" i]',
 ]
 
 # Playwright unions comma-separated selectors, so one wait covers all of them.
@@ -41,6 +42,8 @@ def download_claims_csv(page: Page) -> Path:
 
     print("Waiting for Export button…")
     if not _wait_for_export(page):
+        # Signed out is not a cache problem — say so instead of clearing it.
+        auth.check_session_alive(page)
         # An empty claims page is far more often a poisoned HTTP cache than a UI
         # change: a corrupted cached script kills the micro-app and Anthem serves
         # a bare header and footer. Clear the cache and reload once before
@@ -50,6 +53,7 @@ def download_claims_csv(page: Page) -> Path:
         page.goto(CLAIMS_URL, wait_until="domcontentloaded", timeout=30_000)
         auth.check_for_site_error(page)
         if not _wait_for_export(page):
+            auth.check_session_alive(page)
             raise RuntimeError(
                 "Could not find the Export button on the claims page, including "
                 "after clearing the browser cache and reloading.\n"
@@ -64,6 +68,7 @@ def download_claims_csv(page: Page) -> Path:
     timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
     dest = DATA_DIR / f"claims-{timestamp}.csv"
 
+    auth.check_session_alive(page)
     with page.expect_download(timeout=30_000) as dl_info:
         page.locator(_EXPORT_SELECTOR).first.click(timeout=10_000)
 
