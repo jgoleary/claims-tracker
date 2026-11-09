@@ -143,12 +143,14 @@ automatically writes a `ProviderAlias` row mapping `normalize(submission.provide
 ### Submission filing status
 
 `submitted_date` is nullable and is set when the user confirms the claim was uploaded to
-Anthem (two-step Add Submission modal). The `UNSUBMITTED` info flag surfaces claims that
-have no `submitted_date`.
+Anthem (two-step Add Submission modal) or checks "Already submitted (skip upload)" when
+creating a submission. The `UNSUBMITTED` info flag surfaces claims that have no
+`submitted_date`.
 
-Creating a submission now drives Anthem's claim wizard automatically (see Anthem claim
-filing), but only as far as the upload step — the automation never concludes that a claim
-was filed, so `submitted_date` is still set only by the user's own confirmation.
+Creating a submission drives Anthem's claim wizard automatically (see Anthem claim
+filing) unless "Already submitted (skip upload)" is checked, and only as far as the upload
+step — the automation never concludes that a claim was filed, so `submitted_date` is still
+set only by the user's own confirmation.
 
 ### Anthem claim filing
 
@@ -176,8 +178,9 @@ Started" while nothing clickable held it. Write selectors against `data-testid`;
   injected page banner), and from the "File with Anthem" row action on the Submissions
   table, shown when a submission has a PDF and no `submitted_date`. That row action is
   also the retry path after a failed or refused run.
-- A PDF is mandatory: the Add Submission button is disabled without one, and
-  `POST /api/submissions/{id}/file-with-anthem/run` 400s if `pdf_path` is unset.
+- A PDF is mandatory when filing through Anthem (the Add Submission button is disabled
+  without one unless "Already submitted (skip upload)" is checked, and
+  `POST /api/submissions/{id}/file-with-anthem/run` 400s if `pdf_path` is unset).
 - Patient selection compares the submission's `member_name` against the dropdown's
   `FIRST M LAST` options via `_normalize_name` / `match_patient_options` (surnames
   compared only when both sides have one). Zero or 2+ matches raises

@@ -50,6 +50,7 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
   const [extractNote, setExtractNote] = useState<string | null>(null)
   const [expectedDirty, setExpectedDirty] = useState(false)
   const [networkDirty, setNetworkDirty] = useState(false)
+  const [skipUpload, setSkipUpload] = useState(false)
 
   const [form, setForm] = useState({
     member_name: initial?.member_name ?? '',
@@ -95,7 +96,12 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
         expected_reimbursement: Math.round((parseFloat(expectedReimbursement) || 0) * 100),
       }
       if (isEdit) {
-        return api.submissions.update(initial!.id, { ...form, network_treatment: networkTreatment, ...dollars })
+        return api.submissions.update(initial!.id, {
+          ...form,
+          submitted_date: form.submitted_date || undefined,
+          network_treatment: networkTreatment,
+          ...dollars,
+        })
       } else {
         const body: SubmissionCreate = {
           member_name: form.member_name,
@@ -104,6 +110,7 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
           network_treatment: networkTreatment,
           submission_method: form.submission_method,
           notes: form.notes,
+          ...(skipUpload ? { submitted_date: form.submitted_date || new Date().toISOString().slice(0, 10) } : {}),
           ...dollars,
         }
         const sub = await api.submissions.create(body)
@@ -115,7 +122,7 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
       qc.invalidateQueries({ queryKey: ['submissions'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
       qc.invalidateQueries({ queryKey: ['providerNetworkDefaults'] })
-      if (isEdit) { onClose(); return }
+      if (isEdit || skipUpload) { onClose(); return }
       // Step 2 mounts ClaimFilingPanel, which drives Anthem's wizard for us.
       setCreatedId(result.id)
       setStep(2)
@@ -178,7 +185,7 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
             <input type="date" value={form.service_date} onChange={set('service_date')}
               className="w-full border rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
-          {isEdit && (
+          {(isEdit || skipUpload) && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Submitted Date</label>
               <input type="date" value={form.submitted_date} onChange={set('submitted_date')}
@@ -226,45 +233,66 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
           </div>
         </div>
         {!isEdit && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">PDF (required)</label>
-            <div className="flex items-center gap-3">
-              <input type="file" accept=".pdf" onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)} className="text-sm" />
-              <button
-                type="button"
-                disabled={!pdfFile || extracting}
-                onClick={async () => {
-                  if (!pdfFile) return
-                  setExtracting(true)
-                  setExtractNote(null)
-                  try {
-                    const r: ExtractionResult = await api.submissions.extract(pdfFile)
-                    if (!r.configured) { setExtractNote('PDF auto-fill unavailable (no API key configured).'); return }
-                    if (r.error) { setExtractNote("Couldn’t read the PDF — please enter fields manually."); return }
-                    setForm((p) => ({
-                      ...p,
-                      member_name: r.member_name ?? p.member_name,
-                      provider_name: r.provider_name ?? p.provider_name,
-                      service_date: r.first_service_date ?? p.service_date,
-                      amount_billed: r.amount_billed_cents != null ? String(r.amount_billed_cents / 100) : p.amount_billed,
-                    }))
-                  } catch {
-                    setExtractNote("Couldn’t read the PDF — please enter fields manually.")
-                  } finally {
-                    setExtracting(false)
+          <>
+            <label className="flex items-center gap-2 text-sm text-gray-700 select-none">
+              <input
+                type="checkbox"
+                checked={skipUpload}
+                onChange={(e) => {
+                  const checked = e.target.checked
+                  setSkipUpload(checked)
+                  if (checked && !form.submitted_date) {
+                    setForm((p) => ({ ...p, submitted_date: new Date().toISOString().slice(0, 10) }))
                   }
                 }}
-                className="px-3 py-1 text-sm border rounded text-blue-700 border-blue-300 hover:bg-blue-50 disabled:opacity-50">
-                {extracting ? 'Reading…' : 'Extract from PDF'}
-              </button>
-            </div>
-            {extractNote && <div className="text-xs text-amber-700 mt-1">{extractNote}</div>}
-            {!pdfFile && (
-              <div className="text-xs text-gray-500 mt-1">
-                Attach the claim PDF — it's uploaded to Anthem for you.
+                className="rounded border-gray-300 focus:ring-2 focus:ring-blue-500"
+              />
+              Already submitted (skip upload)
+            </label>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                PDF ({skipUpload ? 'optional' : 'required'})
+              </label>
+              <div className="flex items-center gap-3">
+                <input type="file" accept=".pdf" onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)} className="text-sm" />
+                <button
+                  type="button"
+                  disabled={!pdfFile || extracting}
+                  onClick={async () => {
+                    if (!pdfFile) return
+                    setExtracting(true)
+                    setExtractNote(null)
+                    try {
+                      const r: ExtractionResult = await api.submissions.extract(pdfFile)
+                      if (!r.configured) { setExtractNote('PDF auto-fill unavailable (no API key configured).'); return }
+                      if (r.error) { setExtractNote("Couldn’t read the PDF — please enter fields manually."); return }
+                      setForm((p) => ({
+                        ...p,
+                        member_name: r.member_name ?? p.member_name,
+                        provider_name: r.provider_name ?? p.provider_name,
+                        service_date: r.first_service_date ?? p.service_date,
+                        amount_billed: r.amount_billed_cents != null ? String(r.amount_billed_cents / 100) : p.amount_billed,
+                      }))
+                    } catch {
+                      setExtractNote("Couldn’t read the PDF — please enter fields manually.")
+                    } finally {
+                      setExtracting(false)
+                    }
+                  }}
+                  className="px-3 py-1 text-sm border rounded text-blue-700 border-blue-300 hover:bg-blue-50 disabled:opacity-50">
+                  {extracting ? 'Reading…' : 'Extract from PDF'}
+                </button>
               </div>
-            )}
-          </div>
+              {extractNote && <div className="text-xs text-amber-700 mt-1">{extractNote}</div>}
+              {!pdfFile && (
+                <div className="text-xs text-gray-500 mt-1">
+                  {skipUpload
+                    ? 'Optionally attach the claim PDF to keep on file or extract fields.'
+                    : "Attach the claim PDF — it's uploaded to Anthem for you."}
+                </div>
+              )}
+            </div>
+          </>
         )}
         {totals && (
           <div className="pt-2 pb-1 space-y-1 border-t">
@@ -275,7 +303,7 @@ function SubmissionModal({ onClose, initial, memberNames, providerNames }: {
         <div className="flex justify-end gap-3 pt-2">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
           <button onClick={() => mutation.mutate()}
-            disabled={mutation.isPending || (!isEdit && !pdfFile)}
+            disabled={mutation.isPending || (!isEdit && !skipUpload && !pdfFile)}
             className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
             {mutation.isPending ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Submission'}
           </button>
